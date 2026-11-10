@@ -179,6 +179,7 @@ body.in-lobby .game { display: none; }
 .lt tr.me td { background: rgba(217,165,74,.12); }
 .coachlog { font-family: var(--f-body); font-size: .84rem; line-height: 1.4; max-height: 300px; display: grid; gap: 4px; align-content: start; }
 .coachlog .cl-street { font-family: var(--f-mono); font-size: .72rem; color: var(--brass); margin-top: 2px; }
+.card.runout { opacity: .7; outline: 2px dashed var(--brass); outline-offset: 2px; }
 .clocktxt { font-family: var(--f-mono); color: var(--warn); font-weight: 700; }
 </style>
 </head>
@@ -1035,7 +1036,7 @@ function loadSession() {
 function resetG(mode) {
   clearTimeout(G.timer); clearTimeout(G.turnTimer); clearTimeout(G.autoTimer); stopSpeech();
   G.mode = mode; G.seats = freshSeats(); syncME();
-  Object.assign(G, { handNo: 0, street: "idle", board: [], deck: [], result: null, log: [], heroDec: [], toAct: -1, waitingHero: false, waitingRemote: -1, deadline: 0, nextDealAt: 0, coachLog: [], peek: new Set(), button: 6, currentBet: 0, acts: [], actN: 0, pending: null, sayEv: null });
+  Object.assign(G, { handNo: 0, street: "idle", board: [], deck: [], result: null, log: [], heroDec: [], toAct: -1, waitingHero: false, waitingRemote: -1, deadline: 0, nextDealAt: 0, coachLog: [], extraBoard: [], revealAll: false, runoutNote: "", peek: new Set(), button: 6, currentBet: 0, acts: [], actN: 0, pending: null, sayEv: null });
   skipping = false; tipShown = null; claudeText = ""; claudeState = "idle";
 }
 
@@ -1073,7 +1074,7 @@ function renderTable() {
     const pos = seatPos(i);
     const el = document.createElement("div");
     const peeked = solo && G.peek && G.peek.has(i);
-    const reveal = p.hero || p.shown || peeked;
+    const reveal = p.hero || p.shown || peeked || (G.revealAll && p.hole[0] !== null);
     el.className = "seat" + (G.toAct === i && G.street !== "idle" && !G.result ? " turn" : "") + (p.out ? " out" : p.folded && G.street !== "idle" ? " folded" : "") + (G.result && G.result.winners.some(w => w.name === p.name) ? " winner" : "") + (!solo && p.human ? " human" : "");
     el.style.left = pos.x + "%"; el.style.top = pos.y + "%";
     // Tap a seat to see just that player's cards (solo only)
@@ -1086,7 +1087,8 @@ function renderTable() {
     let madeEl = null;
     if (!p.hero && !p.out && p.hole.length && reveal && p.hole[0] !== null) {
       madeEl = document.createElement("div"); madeEl.className = "madehand";
-      madeEl.textContent = G.board.length >= 3 ? shortDesc(bestScore([...p.hole, ...G.board])) : (cardRank(p.hole[0]) === cardRank(p.hole[1]) ? `Pair of ${RANKS[cardRank(p.hole[0])] === "T" ? "10" : RANKS[cardRank(p.hole[0])]}s` : handLabel(p.hole));
+      const fb = G.board.concat(G.extraBoard || []);
+      madeEl.textContent = fb.length >= 3 ? shortDesc(bestScore([...p.hole, ...fb])) : (cardRank(p.hole[0]) === cardRank(p.hole[1]) ? `Pair of ${RANKS[cardRank(p.hole[0])] === "T" ? "10" : RANKS[cardRank(p.hole[0])]}s` : handLabel(p.hole));
       if (p.folded) madeEl.textContent += " (folded)";
     }
     const plate = document.createElement("div"); plate.className = "plate";
@@ -1105,7 +1107,8 @@ function renderTable() {
     }
   });
   const board = $("board"); board.replaceChildren();
-  for (let k = 0; k < 5; k++) board.append(keyed(`b${k}`, G.board[k]));
+  const fullBoard = G.board.concat(G.extraBoard || []);
+  for (let k = 0; k < 5; k++) { const el = keyed(`b${k}`, fullBoard[k]); if (k >= G.board.length && fullBoard[k] !== undefined) { el.classList.add("runout"); el.title = "Run out for show: not part of the hand"; } board.append(el); }
   $("pot").textContent = "Pot " + money(potTotal() || (G.result ? G.result.winners.reduce((s, w) => s + w.amount, 0) : 0));
   $("street").textContent = G.street === "idle" ? "Waiting to deal" : G.result ? "Hand over" : { preflop: "Pre-flop", flop: "Flop", turn: "Turn", river: "River" }[G.street];
 }
@@ -1193,6 +1196,7 @@ function renderControls() {
     } else {
       if (h.stack < REBUY_BELOW && G.handNo) { const w = document.createElement("span"); w.className = "waiting"; w.textContent = "You're under £2, so you'll buy in again for £10 next hand."; row.append(w); }
       row.append(btn(G.handNo ? "Deal next hand" : "Deal first hand", "primary", deal));
+      if (G.result && !G.revealAll && G.seats.some(p => p.hole.length && !p.out && (!p.shown || G.board.length < 5))) row.append(btn("Run it out & show cards", "small", runItOut));
       if (G.mode === "host" && G.nextDealAt) { const w = document.createElement("span"); w.className = "waiting"; w.textContent = "Auto-deal in "; const ck = document.createElement("span"); ck.className = "clocktxt"; ck.dataset.deadline = G.nextDealAt; ck.dataset.prefix = ""; ck.textContent = secsLeft(G.nextDealAt) + "s"; w.append(ck); row.append(w); }
     }
   } else {
@@ -1264,6 +1268,7 @@ function renderCoachInner() {
     }
     sum.append(how);
     (G.result.notes || []).forEach(n => { const s = document.createElement("div"); s.className = "note"; s.textContent = n; sum.append(s); });
+    if (G.runoutNote) { const s = document.createElement("div"); s.className = "note"; s.textContent = "Run out for show: " + G.runoutNote; sum.append(s); }
     const me = G.seats[ME];
     if (me && typeof G.heroStart === "number" && me.hole.length) {
       const net = me.stack - G.heroStart;
@@ -1436,7 +1441,7 @@ const delay = () => skipping ? 0 : opts.fast ? 250 : 750;
 function deal() {
   if (G.mode === "client") return;
   stopSpeech();
-  clearTimeout(G.timer); clearTimeout(G.autoTimer); G.nextDealAt = 0; G.pending = null; skipping = false; claudeText = ""; claudeState = "idle"; claudeCtl?.abort(); tipShown = null; G.coachLog = [];
+  clearTimeout(G.timer); clearTimeout(G.autoTimer); G.nextDealAt = 0; G.pending = null; skipping = false; claudeText = ""; claudeState = "idle"; claudeCtl?.abort(); tipShown = null; G.coachLog = []; G.extraBoard = []; G.revealAll = false; G.runoutNote = "";
   if (G.mode === "host") LIVE.syncSeats();
   const r = startHand();
   if (r === "hero-broke") { G.street = "idle"; renderAll(); return; }
@@ -1512,6 +1517,23 @@ function onRemoteAction(name, a) {
   if (!["fold", "check", "call", "raise"].includes(a.type)) return;
   clearTimeout(G.turnTimer); G.waitingRemote = -1; G.deadline = 0;
   humanApply(i, a.type, Math.max(0, Math.floor(+a.amount || 0)));
+}
+/* Host / solo: after the hand, deal the rest of the board and show everyone's cards, just to see what would have happened */
+function runItOut() {
+  if (!G.result || G.revealAll || G.mode === "client" || G.mode === "spectate") return;
+  const extra = [];
+  while (G.board.length + extra.length < 5 && G.deck.length > 1) { G.deck.pop(); extra.push(G.deck.pop()); }  // burn and turn, as normal
+  G.extraBoard = extra; G.revealAll = true;
+  const fb = G.board.concat(extra);
+  const dealt = G.seats.filter(p => p.hole.length && !p.out);
+  if (extra.length) log(`(Run out for show: ${extra.map(cardStr).join(" ")})`);
+  dealt.filter(p => !p.shown).forEach(p => log(`(${p.name} had ${p.hole.map(cardStr).join(" ")}${p.folded ? ", folded" : ""})`));
+  const scored = dealt.map(p => ({ p, s: bestScore([...p.hole, ...fb]) })), top = Math.max(...scored.map(x => x.s));
+  const best = scored.filter(x => x.s === top).map(x => x.p.name);
+  G.runoutNote = `If everyone had stayed in to the river, ${best.join(" and ")} would have won with ${describe(top).replace(/^./, c => c.toLowerCase())}.`;
+  log(`(${G.runoutNote})`);
+  if (G.mode === "host" && G.autoTimer) { clearTimeout(G.autoTimer); G.nextDealAt = serverNow() + AUTO_DEAL_MS; G.autoTimer = setTimeout(deal, AUTO_DEAL_MS); }  // give people time to look
+  renderAll();
 }
 function finish() {
   G.result = settle(); G.toAct = -1; G.waitingHero = false; G.waitingRemote = -1; G.deadline = 0; skipping = false;
@@ -1825,8 +1847,8 @@ const LIVE = {
     const st = {
       v: 2, host: meName, button: G.button, board: G.board, street: G.street, currentBet: G.currentBet, minRaise: G.minRaise, toAct: G.toAct, handNo: G.handNo, log: G.log,
       lastAggr: G.lastAggr, raisesThisStreet: G.raisesThisStreet, result: G.result, sbI: G.sbI, bbI: G.bbI, deadline: G.deadline || 0, actN: G.actN, acts: G.acts,
-      coachLog: G.coachLog || [], nextDealAt: G.nextDealAt || 0, sayEv: G.sayEv || null,
-      seats: G.seats.map(p => ({ name: p.name, stack: p.stack, buyins: p.buyins, out: p.out, folded: p.folded, allIn: p.allIn, bet: p.bet, committed: p.committed, acted: p.acted, lastAct: p.lastAct, shown: p.shown, thinking: !!p.thinking, human: !!p.human, dealt: p.hole.length > 0, hole: p.shown ? p.hole : [] })),
+      coachLog: G.coachLog || [], extraBoard: G.extraBoard || [], revealAll: !!G.revealAll, runoutNote: G.runoutNote || "", nextDealAt: G.nextDealAt || 0, sayEv: G.sayEv || null,
+      seats: G.seats.map(p => ({ name: p.name, stack: p.stack, buyins: p.buyins, out: p.out, folded: p.folded, allIn: p.allIn, bet: p.bet, committed: p.committed, acted: p.acted, lastAct: p.lastAct, shown: p.shown, thinking: !!p.thinking, human: !!p.human, dealt: p.hole.length > 0, hole: p.shown || (G.revealAll && G.result) ? p.hole : [] })),
     };
     const json = JSON.stringify(st);
     if (json === this.lastJson) return;
@@ -1851,7 +1873,7 @@ function applyState(st) {
   const prevHand = G.handNo, hadResult = !!G.result, wasWaiting = G.waitingHero;
   Object.assign(G, { button: st.button, board: st.board || [], street: st.street, currentBet: st.currentBet, minRaise: st.minRaise, toAct: st.toAct, handNo: st.handNo, log: st.log || [],
     lastAggr: st.lastAggr, raisesThisStreet: st.raisesThisStreet, result: st.result, sbI: st.sbI, bbI: st.bbI, deadline: st.deadline, actN: st.actN, acts: st.acts || [],
-    coachLog: st.coachLog || [], nextDealAt: st.nextDealAt });
+    coachLog: st.coachLog || [], extraBoard: st.extraBoard || [], revealAll: !!st.revealAll, runoutNote: st.runoutNote || "", nextDealAt: st.nextDealAt });
   const mine = LIVE.myHole && LIVE.myHole.hand === st.handNo ? LIVE.myHole.cards : null;
   const seatsIn = G.mode === "spectate" || st.seats.some(q => q.name === meName) ? st.seats : st.seats.concat([{ name: meName, stack: BUYIN, buyins: 1, out: true, folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "Sitting in next hand", shown: false, human: true, dealt: false, hole: [] }]);
   ME = G.mode === "spectate" ? -1 : seatsIn.findIndex(q => q.name === meName);
