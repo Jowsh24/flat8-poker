@@ -364,8 +364,8 @@ const PROFILES = {
   Emils: { rank: 6, blurb: "The fish. Plays every hand and calls to the river with nothing, unless the bet is big (over £2). Only bets or raises when he actually has a good hand.",
     limp: -9, raise: 13, callRaise: -9, callShove: 6, station: true, nothingCap: 200, valueR: 2.0, raiseR: 2.4, slow: 0, bluff: 0, bluffHU: 0, callMul: 0.3, size: [0.5, 0.8], big: [0.8, 1.1], rebuys: true },
 };
-PROFILES.Josh = { rank: 0, blurb: "Plays conservatively and usually makes the right call, fold or raise. Limps most playable hands; loves a £1.50 raise pre-flop (77+, AJ+, KQ) or on the flop with top pair, good kicker or better. Bluffs very, very rarely.",
-  limp: 3, raise: 99, raise150: true, flop150: true, callRaise: 9, callShove: 11, valueR: 1.5, raiseR: 2.1, slow: 0.08, bluff: 0.015, bluffHU: 0.025, callMul: 1.08, minR: 0.8, size: [0.5, 0.7], big: [0.7, 0.9], rebuys: true };
+PROFILES.Josh = { rank: 0, blurb: "Plays conservatively and usually makes the right call, fold or raise. Limps most playable hands; loves a £1.50 raise pre-flop (77+, AJ+, KQ) or on the flop with top pair, good kicker or better. Bluffs very, very rarely, though he'll sometimes stab at a heads-up river with a missed ace or king. Limps wide late when others have limped and raises suited aces to £1 in position.",
+  limp: 3, raise: 99, raise150: true, flop150: true, lateLimpAny: 1, suitedAceRaise: 0.5, riverStab: 0.25, callRaise: 9, callShove: 11, valueR: 1.5, raiseR: 2.1, slow: 0.08, bluff: 0.015, bluffHU: 0.025, callMul: 1.08, minR: 0.8, size: [0.5, 0.7], big: [0.7, 0.9], rebuys: true };
 const SEAT_NAMES = ["Josh", "Vadim", "Saul", "Baran", "Jesal", "Evan", "Emils"];
 const rand = (a, b) => a + Math.random() * (b - a);
 const money = p => (p < 0 ? "-£" : "£") + (Math.abs(p) / 100).toFixed(2);
@@ -574,6 +574,10 @@ function botDecide(i) {
         return { type: "fold" };
       }
     }
+    // Josh (online games): limps almost anything late with 2+ limpers in; raises suited aces to £1 in position over limpers
+    const late = i === G.button || nextIdx(i, q => q.hole.length > 0 && !q.out) === G.button;
+    if (!facingRaise && late && limpers >= 1 && pr.suitedAceRaise && hi === 12 && cardSuit(p.hole[0]) === cardSuit(p.hole[1]) && Math.random() < pr.suitedAceRaise) return { type: "raise", amount: 100 };
+    if (!facingRaise && toCall > 0 && late && limpers >= 2 && pr.lateLimpAny !== undefined && c >= pr.lateLimpAny) return { type: "call" };
     if (pr.aceShove && weakAce && Math.random() < pr.aceShove) return { type: "raise", amount: p.bet + p.stack };
     if (!facingRaise) {
       if (pr.open50 && c >= pr.limp && G.currentBet === BB && Math.random() < pr.open50) return { type: "raise", amount: 50 };
@@ -624,6 +628,8 @@ function botDecide(i) {
       const floor = strongMade ? (river && pr.riverMin ? pr.riverMin : (pr.bigMin || 0)) : 0;
       return { type: "raise", amount: Math.max(BB, floor, pr.betMin || 0, round10(pot * rand(s[0], s[1]) * mul)) };
     }
+    // Josh (online games): heads-up on the river with a missed ace- or king-high, he sometimes stabs about half the pot
+    if (pr.riverStab && river && hu && madeCat(p.hole, G.board) < 1 && Math.max(cardRank(p.hole[0]), cardRank(p.hole[1])) >= 11 && Math.random() < pr.riverStab) return { type: "raise", amount: Math.max(100, round10(pot * rand(0.45, 0.55))) };
     const bp = hu ? pr.bluffHU : pr.bluff;
     if ((!river || r < 0.7) && Math.random() < bp) return { type: "raise", amount: Math.max(BB, pr.betMin || 0, round10(pot * rand(pr.big[0], pr.big[1]))) };
     return { type: "check" };
