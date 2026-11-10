@@ -694,7 +694,7 @@ function wetBoard(b) {
 const aceOnBoard = b => b.some(c => cardRank(c) === 12);
 // How much to trust a bet: m scales your equity (lower = their range is stronger)
 // Only Josh gets the player-specific reads; everyone else gets a generic coach
-const FULL = () => G.seats[ME] && G.seats[ME].name === "Josh";
+const FULL = () => ME_NAME === "Josh";
 function readBet(name, frac, hu, street, board) {
   const big = frac >= 0.75;
   if (!FULL()) return { m: street === "river" ? 0.8 : 0.85, t: big ? "A big bet at this table usually means a strong hand." : "" };
@@ -1006,7 +1006,8 @@ const ident = {
 };
 let meName = null;
 function setMe(name) { meName = name; ME_NAME = name; ident.set(name); }
-const syncME = () => { ME = G.seats.findIndex(p => p.name === meName); G.seats.forEach((p, i) => p.hero = i === ME); };
+const syncME = () => { ME = G.mode === "spectate" ? -1 : G.seats.findIndex(p => p.name === meName); G.seats.forEach((p, i) => p.hero = i === ME); };
+const viewName = () => G.mode === "spectate" ? null : meName;  // a spectator isn't any of the players
 { const saved = ident.get(); if (ALL_NAMES.includes(saved)) setMe(saved); }
 
 const storeKey = () => (!meName || meName === "Josh") ? "flat8poker.v1" : "flat8poker.v1." + meName;
@@ -1040,7 +1041,7 @@ function resetG(mode) {
 
 /* ===== Table drawing ===== */
 function seatPos(i) {
-  const N = G.seats.length, v = (i - ME + N) % N;  // you always sit at the bottom
+  const N = G.seats.length, v = (i - (ME >= 0 ? ME : 0) + N) % N;  // you always sit at the bottom
   const narrow = window.matchMedia("(max-width: 760px)").matches;
   const a = (90 + v * 360 / N) * Math.PI / 180;
   const rx = narrow ? 40 : 44, ry = narrow ? 42 : 41;
@@ -1111,6 +1112,7 @@ function renderTable() {
 
 function renderStats() {
   const h = G.seats[ME];
+  if (!h) { const s = $("stats"); s.replaceChildren(); const d = document.createElement("span"); d.className = "stat"; d.textContent = "Hand"; const b = document.createElement("b"); b.textContent = String(G.handNo); d.append(b); const w = document.createElement("span"); w.className = "stat"; w.textContent = "Watching"; s.append(d, w); return; }
   const netNow = h.stack - h.buyins * BUYIN + (G.result ? 0 : h.committed);
   const s = $("stats"); s.replaceChildren();
   const add = (label, val, cls) => { const d = document.createElement("span"); d.className = "stat"; d.textContent = label; const b = document.createElement("b"); b.textContent = val; if (cls) b.className = cls; d.append(b); s.append(d); };
@@ -1125,6 +1127,16 @@ function renderLog() { const l = $("log"); l.textContent = G.log.join("\n"); l.s
 function renderControls() {
   const c = $("controls"); c.replaceChildren();
   const h = G.seats[ME], solo = G.mode === "solo";
+  if (!h) {  // spectating
+    const info = document.createElement("div"); info.className = "yourhand";
+    const t = document.createElement("div"); t.className = "info";
+    const m = document.createElement("div"); m.className = "made"; m.textContent = `Watching table ${LIVE.code || ""}`;
+    const sub = document.createElement("div"); sub.className = "sub";
+    const who = G.seats[G.toAct];
+    sub.textContent = G.street === "idle" ? `Waiting for ${LIVE.hostName || "the host"} to deal.` : G.result ? "Hand over." : who ? `${who.name} to act${who.human ? "" : " (computer)"}.` : "In play.";
+    if (G.deadline && who && !G.result && G.street !== "idle") { const ck = document.createElement("span"); ck.className = "clocktxt"; ck.dataset.deadline = G.deadline; ck.dataset.prefix = " · "; ck.textContent = " · " + secsLeft(G.deadline) + "s"; sub.append(ck); }
+    t.append(m, sub); info.append(t); c.append(info); return;
+  }
   const yh = document.createElement("div"); yh.className = "yourhand";
   const cards = document.createElement("div"); cards.className = "cards";
   const haveCards = h.hole.length && h.hole[0] !== null;
@@ -1220,7 +1232,7 @@ function renderCoach() {
   renderCoachInner();
   if (keep) { const ta = $("realNote"); if (ta) { ta.focus(); ta.setSelectionRange(keep[0], keep[1]); } }
 }
-const youOr = n => n === meName ? "You" : n;
+const youOr = n => n === viewName() ? "You" : n;
 function renderCoachInner() {
   const body = $("coachBody"); body.replaceChildren();
   $("coachTitle").textContent = G.result ? `Round summary · hand ${G.handNo}` : "Coach";
@@ -1244,7 +1256,7 @@ function renderCoachInner() {
     const how = document.createElement("div"); how.className = "how";
     if (G.result.showdown) {
       const winnersN = G.result.winners.map(w => w.name);
-      const others = G.result.hands.filter(h => !winnersN.includes(h.name)).map(h => `${h.name === meName ? "you" : h.name} (${h.desc.replace(/^./, c => c.toLowerCase())})`);
+      const others = G.result.hands.filter(h => !winnersN.includes(h.name)).map(h => `${h.name === viewName() ? "you" : h.name} (${h.desc.replace(/^./, c => c.toLowerCase())})`);
       how.textContent = `Showdown on the river${others.length ? ", beating " + others.join(", ") : ""}.`;
       if (G.board.length < 5 || G.seats.some(q => inHand(q) && q.allIn)) how.textContent = how.textContent.replace("Showdown on the river", "Showdown after an all-in");
     } else {
@@ -1253,7 +1265,7 @@ function renderCoachInner() {
     sum.append(how);
     (G.result.notes || []).forEach(n => { const s = document.createElement("div"); s.className = "note"; s.textContent = n; sum.append(s); });
     const me = G.seats[ME];
-    if (typeof G.heroStart === "number" && me.hole.length) {
+    if (me && typeof G.heroStart === "number" && me.hole.length) {
       const net = me.stack - G.heroStart;
       const y = document.createElement("div"); y.className = "net " + (net > 0 ? "good" : net < 0 ? "bad" : "");
       y.textContent = `You: ${net > 0 ? "+" : net < 0 ? "−" : "±"}${money(Math.abs(net))} this hand · stack ${money(me.stack)}`;
@@ -1272,7 +1284,7 @@ function renderCoachInner() {
       }
       body.append(rv);
       const n = document.createElement("p"); n.className = "note"; n.textContent = "Equity figures are estimates against random hands. Real ranges are stronger when these players bet."; body.append(n);
-    } else if (me.hole.length) {
+    } else if (me && me.hole.length) {
       const n = document.createElement("p"); n.className = "note"; n.textContent = "You didn't have to make a decision this hand."; body.append(n);
     }
     if (G.mode === "solo") {
@@ -1288,7 +1300,7 @@ function renderCoachInner() {
 
 function renderCoachLog(body) {
   if (!G.handNo) return;
-  const lines = (G.coachLog || []).filter(x => x.who !== meName);
+  const lines = (G.coachLog || []).filter(x => x.who !== viewName());
   const hd = document.createElement("div"); hd.className = "subhead"; hd.textContent = "Coach's log"; body.append(hd);
   const box = document.createElement("div"); box.className = "log coachlog"; box.id = "coachLog";
   if (!lines.length) box.textContent = "Why each player did what they did will appear here as the hand goes on.";
@@ -1764,6 +1776,19 @@ const LIVE = {
     this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/state`), s => { const v = s.val(); if (v && v.json) { this.lastState = JSON.parse(v.json); applyState(this.lastState); } }));
     this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/hole/${f.uid}`), s => { const v = s.val(); this.myHole = v && v.json ? JSON.parse(v.json) : null; if (this.lastState) applyState(this.lastState); }));
   },
+  async watch(code) {
+    const f = await fbInit(), D = f.D;
+    const meta = (await D.get(D.ref(f.db, `rooms/${code}/meta`))).val();
+    if (!meta) throw new Error(`There's no table with the code ${code}.`);
+    if (meta.closed) throw new Error("That table has closed.");
+    this.isHost = false; this.watching = true; this.hostName = meta.hostName || "the host"; this.code = code;
+    resetG("spectate");
+    const w = D.ref(f.db, `rooms/${code}/meta/watchers/${f.uid}`);
+    await D.set(w, true); D.onDisconnect(w).remove();
+    this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/meta`), s => this.onMeta(s.val())));
+    this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/state`), s => { const v = s.val(); if (v && v.json) { this.lastState = JSON.parse(v.json); applyState(this.lastState); } }));
+    history.replaceState(null, "", location.pathname + "?room=" + code);
+  },
   onMeta(m) {
     this.meta = m || {}; this.present = this.meta.present || {};
     if (this.meta.hostName) this.hostName = this.meta.hostName;
@@ -1814,10 +1839,10 @@ const LIVE = {
   leave() {
     this.offs.forEach(off => { try { off(); } catch {} }); this.offs = [];
     if (fb && this.code) {
-      fb.D.remove(fb.D.ref(fb.db, `rooms/${this.code}/meta/present/${fb.uid}`)).catch(() => {});
+      fb.D.remove(fb.D.ref(fb.db, `rooms/${this.code}/meta/${this.watching ? "watchers" : "present"}/${fb.uid}`)).catch(() => {});
       if (this.isHost) fb.D.set(fb.D.ref(fb.db, `rooms/${this.code}/meta/closed`), true).catch(() => {});
     }
-    Object.assign(this, { code: null, isHost: false, meta: null, present: {}, myHole: null, lastState: null, lastJson: "", lastSayN: null });
+    Object.assign(this, { code: null, isHost: false, watching: false, meta: null, present: {}, myHole: null, lastState: null, lastJson: "", lastSayN: null });
     history.replaceState(null, "", location.pathname);
   },
 };
@@ -1828,11 +1853,11 @@ function applyState(st) {
     lastAggr: st.lastAggr, raisesThisStreet: st.raisesThisStreet, result: st.result, sbI: st.sbI, bbI: st.bbI, deadline: st.deadline, actN: st.actN, acts: st.acts || [],
     coachLog: st.coachLog || [], nextDealAt: st.nextDealAt });
   const mine = LIVE.myHole && LIVE.myHole.hand === st.handNo ? LIVE.myHole.cards : null;
-  const seatsIn = st.seats.some(q => q.name === meName) ? st.seats : st.seats.concat([{ name: meName, stack: BUYIN, buyins: 1, out: true, folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "Sitting in next hand", shown: false, human: true, dealt: false, hole: [] }]);
-  ME = seatsIn.findIndex(q => q.name === meName);
+  const seatsIn = G.mode === "spectate" || st.seats.some(q => q.name === meName) ? st.seats : st.seats.concat([{ name: meName, stack: BUYIN, buyins: 1, out: true, folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "Sitting in next hand", shown: false, human: true, dealt: false, hole: [] }]);
+  ME = G.mode === "spectate" ? -1 : seatsIn.findIndex(q => q.name === meName);
   G.seats = seatsIn.map((q, i) => ({ ...q, hero: i === ME, hole: q.hole && q.hole.length ? q.hole : q.dealt ? (i === ME && mine ? mine : [null, null]) : [] }));
-  if (st.handNo !== prevHand) { G.heroDec = []; tipShown = null; G.heroStart = G.seats[ME].stack + G.seats[ME].committed; }
-  G.waitingHero = G.toAct === ME && !G.result && G.street !== "idle" && !!mine && canAct(G.seats[ME]);
+  if (st.handNo !== prevHand) { G.heroDec = []; tipShown = null; G.heroStart = ME >= 0 ? G.seats[ME].stack + G.seats[ME].committed : 0; }
+  G.waitingHero = ME >= 0 && G.toAct === ME && !G.result && G.street !== "idle" && !!mine && canAct(G.seats[ME]);
   if (!G.waitingHero) tipShown = null;
   // Audio: speak new actions and streets as they happen, and the winners at the end
   if (st.sayEv && LIVE.lastSayN !== null && st.sayEv.n !== LIVE.lastSayN) speakNow(sayText(st.sayEv.x));
@@ -1855,7 +1880,7 @@ function renderLobby() {
   const why = document.createElement("p"); why.className = "note";
   why.textContent = "Play as yourself, or as Player 1 or Player 2 if your name isn't here. Your decisions are saved so the computer version of you learns to play more like the real you.";
   L.append(why);
-  if (!meName) { const lt = document.createElement("div"); lt.id = "lifetime"; lt.className = "lifetime"; L.append(lt); renderLifetime(); return; }
+  if (!meName) { L.append(watchBox(true)); const err = document.createElement("div"); err.className = "err"; err.setAttribute("role", "status"); err.textContent = lobbyErr; L.append(err); const lt = document.createElement("div"); lt.id = "lifetime"; lt.className = "lifetime"; L.append(lt); renderLifetime(); return; }
   const modes = document.createElement("div"); modes.className = "modes";
   const m1 = document.createElement("div"); m1.className = "mode";
   const h1 = document.createElement("h3"); h1.textContent = "Solo"; const p1 = document.createElement("p"); p1.className = "note"; p1.textContent = "You against computer versions of everyone else.";
@@ -1871,16 +1896,37 @@ function renderLobby() {
   const jb = btn(lobbyBusy ? "Joining…" : "Join", params.get("room") ? "primary" : "", () => startJoin(inp.value)); jb.disabled = lobbyBusy;
   inp.onkeydown = e => { if (e.key === "Enter") startJoin(inp.value); };
   m3.append(h3, inp, jb); modes.append(m3);
+  modes.append(watchBox(false));
   L.append(modes);
   const err = document.createElement("div"); err.className = "err"; err.setAttribute("role", "status"); err.textContent = lobbyErr; L.append(err);
   const lt = document.createElement("div"); lt.id = "lifetime"; lt.className = "lifetime"; L.append(lt); renderLifetime();
 }
+function watchBox(alone) {
+  const m = document.createElement("div"); m.className = "mode";
+  const h = document.createElement("h3"); h.textContent = alone ? "Or just watch a table" : "Watch a table";
+  const p = document.createElement("p"); p.className = "note"; p.textContent = "Put in a table code to watch the game. You don't get a seat and can't see anyone's cards until showdown.";
+  const inp = document.createElement("input"); inp.maxLength = 4; inp.placeholder = "CODE"; inp.setAttribute("aria-label", "Table code to watch"); inp.autocomplete = "off";
+  if (params.get("room")) inp.value = params.get("room").toUpperCase();
+  const b = btn(lobbyBusy ? "Connecting…" : "Watch", "", () => startWatch(inp.value)); b.disabled = lobbyBusy;
+  inp.onkeydown = e => { if (e.key === "Enter") startWatch(inp.value); };
+  m.append(h, p, inp, b); return m;
+}
+async function startWatch(code) {
+  code = (code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(code)) { lobbyErr = "Table codes are 4 letters or numbers."; renderLobby(); return; }
+  if (lobbyBusy) return; lobbyBusy = true; lobbyErr = ""; renderLobby();
+  try { loadSession(); await LIVE.watch(code); lobbyBusy = false; enterGame(); }
+  catch (e) { lobbyBusy = false; lobbyErr = e.message || "Couldn't reach the server. Check your connection."; LIVE.leave(); renderLobby(); }
+}
 function renderWho() {
   const w = $("who"); w.replaceChildren();
   $("subtitle").textContent = inLobby ? "" : G.mode === "solo" ? "practice table" : "live table";
-  if (!meName || inLobby) return;
-  const t = document.createElement("span"); t.append("Playing as "); const b = document.createElement("b"); b.textContent = meName; t.append(b);
-  w.append(t, btn(G.mode === "solo" ? "Menu" : "Leave table", "small", () => { if (G.mode !== "solo") LIVE.leave(); else { clearTimeout(G.timer); clearTimeout(G.turnTimer); stopSpeech(); } lobbyErr = ""; showLobby(true); }));
+  if (inLobby || (!meName && G.mode !== "spectate")) return;
+  $("subtitle").textContent = G.mode === "spectate" ? "watching" : $("subtitle").textContent;
+  const t = document.createElement("span");
+  if (G.mode === "spectate") { t.append("Watching table "); const b = document.createElement("b"); b.textContent = LIVE.code; t.append(b); }
+  else { t.append("Playing as "); const b = document.createElement("b"); b.textContent = meName; t.append(b); }
+  w.append(t, btn(G.mode === "solo" ? "Menu" : G.mode === "spectate" ? "Stop watching" : "Leave table", "small", () => { if (G.mode !== "solo") LIVE.leave(); else { clearTimeout(G.timer); clearTimeout(G.turnTimer); stopSpeech(); } lobbyErr = ""; showLobby(true); }));
 }
 function renderBanner() {
   const B = $("banner");
@@ -1893,8 +1939,11 @@ function renderBanner() {
   });
   B.append(share);
   const here = document.createElement("span"); const names = LIVE.presentNames();
-  here.textContent = "At the table: " + (names.length ? names.map(n => n === meName ? n + " (you)" : n).join(", ") : meName) + ". The computer plays everyone else.";
+  here.textContent = "At the table: " + (names.length ? names.map(n => n === viewName() ? n + " (you)" : n).join(", ") : "nobody yet") + ". The computer plays everyone else.";
   B.append(here);
+  const nw = Object.keys(LIVE.meta?.watchers || {}).length;
+  if (nw) { const w = document.createElement("span"); w.className = "note"; w.textContent = `👀 ${nw} watching`; B.append(w); }
+  if (G.mode === "spectate") { const n = document.createElement("span"); n.className = "note"; n.textContent = "You're watching: you can't see anyone's cards until showdown."; B.append(n); }
   if (!LIVE.isHost) {
     const hostUid = LIVE.meta?.host;
     if (LIVE.meta?.closed) { const w = document.createElement("span"); w.className = "warnmsg"; w.textContent = `${LIVE.hostName} has closed this table.`; B.append(w); }
@@ -1949,9 +1998,9 @@ function spokenWinners(res) {
   if (!res || !res.winners.length) return null;
   const by = new Map();
   for (const w of res.winners) { const e = by.get(w.name) || { amount: 0, hand: w.hand }; e.amount += w.amount; by.set(w.name, e); }
-  return [...by].map(([name, e]) => `${name === meName ? "You win" : name + " wins"} ${spokenMoney(e.amount)}${res.showdown && e.hand ? " with " + e.hand.toLowerCase() : ""}`).join(". ");
+  return [...by].map(([name, e]) => `${name === viewName() ? "You win" : name + " wins"} ${spokenMoney(e.amount)}${res.showdown && e.hand ? " with " + e.hand.toLowerCase() : ""}`).join(". ");
 }
-const sayText = x => !x ? null : typeof x === "string" ? x : (x.who === meName ? "" : x.who + " ") + x.text;
+const sayText = x => !x ? null : typeof x === "string" ? x : (x.who === viewName() ? "" : x.who + " ") + x.text;
 function stopSpeech() { speechGen++; if (speechOK) speechSynthesis.cancel(); G.say = null; }
 function speakNow(text) {
   if (!text || !opts.audio || !speechOK) return;
