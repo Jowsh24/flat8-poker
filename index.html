@@ -370,7 +370,7 @@ const PROFILES = {
   Jesal: { rank: 4, blurb: "Always limps when it's 20p and no one has raised (wants to see every flop), hates pre-flop raises and rarely calls them. Bets for value, gives up with nothing, rarely bluffs. Plays his £10 until it's gone.",
     limp: -20, limpOnly: true, pairCall: { flop: 100 }, raise: 13, callRaise: 10, callShove: 11, valueR: 1.6, raiseR: 2.2, slow: 0.05, bluff: 0.04, bluffHU: 0.05, callMul: 1.05, minR: 0.8, size: [0.5, 0.7], big: [0.6, 0.8], rebuys: false },
   Evan: { rank: 5, blurb: "Plays like Jesal and folds rubbish (but plays any suited hand), and folds after the flop without a real hand (doesn't bluff-catch), but massively overvalues weak aces (has shoved A2 and A3 pre-flop). Has fallen for Baran's bluffs. Buys in again when he runs out.",
-    limp: 4, suitedAny: true, raise: 12, callRaise: 8, callShove: 9, aceShove: 0.15, overpairCall: true, valueR: 1.6, raiseR: 2.2, slow: 0.05, bluff: 0.04, bluffHU: 0.05, callMul: 1.2, minR: 0.9, scared: true, size: [0.5, 0.7], big: [0.6, 0.8], rebuys: true },
+    limp: 4, suitedAny: true, limpCall50: true, raise: 12, callRaise: 8, callShove: 9, aceShove: 0.15, overpairCall: true, valueR: 1.6, raiseR: 2.2, slow: 0.05, bluff: 0.04, bluffHU: 0.05, callMul: 1.2, minR: 0.9, scared: true, size: [0.5, 0.7], big: [0.6, 0.8], rebuys: true },
   Emils: { rank: 6, blurb: "The fish. Plays every hand and calls to the river with nothing, unless the bet is big (over £2). Only bets or raises when he actually has a good hand.",
     limp: -9, raise: 13, callRaise: -9, callShove: 6, station: true, nothingCap: 200, valueR: 2.0, raiseR: 2.4, slow: 0, bluff: 0, bluffHU: 0, callMul: 0.3, size: [0.5, 0.8], big: [0.8, 1.1], rebuys: true },
 };
@@ -613,6 +613,7 @@ function botDecide(i) {
     if (G.currentBet <= 50 && c < 14) {  // a 50p raise (usually Baran) gets treated almost like a limp
       if (c >= pr.raise && G.raisesThisStreet < 2) return { type: "raise", amount: 150 };
       if (pr.station || pr.cheapAll || suitedPlay || c >= pr.limp + 1) return { type: "call" };
+      if (pr.limpCall50 && p.committed >= BB) return { type: "call" };  // Evan: already put 20p in, so he'll pay the extra 30p
       return { type: "fold" };
     }
     if (c >= 14 && G.raisesThisStreet < 3) return { type: "raise", amount: G.currentBet * 3 };
