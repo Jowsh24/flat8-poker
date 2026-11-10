@@ -1081,13 +1081,13 @@ function renderTable() {
     const pos = seatPos(i);
     const el = document.createElement("div");
     const peeked = solo && G.peek && G.peek.has(i);
-    const reveal = p.hero || p.shown || (solo && (opts.showAll || peeked));
+    const reveal = p.hero || p.shown || peeked;
     el.className = "seat" + (G.toAct === i && G.street !== "idle" && !G.result ? " turn" : "") + (p.out ? " out" : p.folded && G.street !== "idle" ? " folded" : "") + (G.result && G.result.winners.some(w => w.name === p.name) ? " winner" : "") + (!solo && p.human ? " human" : "");
     el.style.left = pos.x + "%"; el.style.top = pos.y + "%";
     // Tap a seat to see just that player's cards (solo only)
     if (solo && !p.hero && p.hole.length && !p.out) {
       el.classList.add("peekable"); el.title = peeked ? `Hide ${p.name}'s cards` : `Tap to see ${p.name}'s cards`;
-      el.onclick = () => { if (G.peek.has(i)) G.peek.delete(i); else G.peek.add(i); renderTable(); };
+      el.onclick = () => { if (G.peek.has(i)) G.peek.delete(i); else G.peek.add(i); syncShowAll(); saveSession(); renderTable(); renderControls(); };
     }
     const hole = document.createElement("div"); hole.className = "hole";
     if (p.hole.length && !p.out && (!p.folded || reveal)) p.hole.forEach((c, k) => hole.append(keyed(`s${i}-${k}`, reveal ? c : null, "sm")));
@@ -1150,7 +1150,7 @@ function renderControls() {
 
   const row = document.createElement("div"); row.className = "btnrow";
   if (G.handNo > 0 && solo) {
-    const eye = btn(opts.showAll ? "Hide their cards" : "Show their cards", "small", () => { opts.showAll = !opts.showAll; $("optShow").checked = opts.showAll; saveSession(); renderTable(); renderControls(); });
+    const eye = btn(opts.showAll ? "Hide their cards" : "Show their cards", "small", () => setShowAll(!opts.showAll));
     eye.setAttribute("aria-pressed", opts.showAll ? "true" : "false");
     yh.append(eye);
   }
@@ -1200,6 +1200,19 @@ function renderControls() {
     if (h.folded && solo) row.append(btn("Skip to the end", "small", () => { skipping = true; if (speechOK) speechSynthesis.cancel(); if (G.pending) { clearTimeout(G.timer); G.pending(); } }));
   }
   c.append(row);
+}
+/* "Show everyone's cards" and tapping seats are one system: the toggle reveals or hides every seat,
+   and it switches itself on when every seat has been tapped open (and off when one is closed again). */
+const peekable = () => G.seats.map((p, i) => i).filter(i => !G.seats[i].hero && G.seats[i].hole.length && !G.seats[i].out);
+function setShowAll(on) {
+  opts.showAll = on;
+  if (G.mode === "solo") G.peek = new Set(on ? peekable() : []);
+  $("optShow").checked = on; saveSession(); renderTable(); renderControls();
+}
+function syncShowAll() {
+  const all = peekable();
+  if (all.length) opts.showAll = all.every(i => G.peek.has(i));
+  $("optShow").checked = opts.showAll;
 }
 function btn(text, cls, fn) { const b = document.createElement("button"); b.textContent = text; if (cls) b.className = cls; b.onclick = fn; return b; }
 
@@ -1416,6 +1429,7 @@ function deal() {
   if (r === "hero-broke") { G.street = "idle"; renderAll(); return; }
   if (r === "no-players") { G.log = ["Not enough players left with chips. Reset everyone to £10 to keep playing."]; G.street = "idle"; renderAll(); return; }
   if (G.mode === "host") LIVE.sendHoles();
+  if (G.mode === "solo" && opts.showAll) G.peek = new Set(peekable());  // the toggle carries over to the next hand
   countOpeningBuyins();
   renderAll(); G.timer = setTimeout(step, delay());
 }
@@ -1932,7 +1946,7 @@ $("optAuto").onchange = e => { opts.autoDeal = e.target.checked; saveSession(); 
 $("optAudio").disabled = !speechOK;
 if (!speechOK) $("optAudio").parentElement.title = "This browser can't speak.";
 $("optAudio").onchange = e => { opts.audio = e.target.checked; saveSession(); if (opts.audio) { G.say = "Audio on"; announce(() => {}); } else if (speechOK) speechSynthesis.cancel(); };
-$("optShow").onchange = e => { opts.showAll = e.target.checked; saveSession(); renderTable(); renderControls(); };
+$("optShow").onchange = e => setShowAll(e.target.checked);
 $("copyHand").onclick = async () => {
   const hn = notesFor(n => n.hand === G.handNo);
   const txt = G.log.join("\n") + (hn ? `\nWhat would really happen (${meName}):\n` + hn : "");
