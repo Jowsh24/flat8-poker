@@ -387,7 +387,7 @@ function snapTo(amount, p) {
 const nearestStep = v => LADDER.reduce((b, x) => Math.abs(x - v) < Math.abs(b - v) ? x : b, LADDER[0]);
 
 /* ===== Game state ===== */
-function newSeat(name) { return { name, hero: name === ME_NAME, human: name === ME_NAME, stack: BUYIN, buyins: 1, out: false, hole: [], folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "", shown: false, lossSince: { bots: 0, humans: 0 } }; }
+function newSeat(name) { return { name, hero: name === ME_NAME, human: name === ME_NAME, stack: BUYIN, buyins: 1, out: false, hole: [], folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "", shown: false }; }
 function freshSeats(guests) {
   const g = guests || (GUESTS.includes(ME_NAME) ? [ME_NAME] : []);
   return SEAT_NAMES.concat(GUESTS.filter(n => g.includes(n))).map(newSeat);
@@ -1600,31 +1600,12 @@ function logHand() {
 
 /* ===== Lifetime earnings: who paid whom, split into real players and computer players ===== */
 const kindOf = p => p.human ? "humans" : "bots";
-// A rebuy means the last £10 is gone: split that buy-in by where the money went since the previous one
-function onRebuy(p) {
-  try {
-    const ls = p.lossSince || { bots: 0, humans: 0 };
-    let wb = Math.max(0, ls.bots), wh = Math.max(0, ls.humans);
-    if (wb + wh === 0) { const others = G.seats.some(q => q !== p && q.human); wb = others ? 0.5 : 1; wh = others ? 0.5 : 0; }
-    const base = `totals/${kindOf(p)}/${p.name}`, up = {};
-    if (wb) up[`${base}/bots/buyins`] = wb / (wb + wh);
-    if (wh) up[`${base}/humans/buyins`] = wh / (wb + wh);
-    totalsUpdate(up);
-    p.lossSince = { bots: 0, humans: 0 };
-  } catch (e) { console.warn("Couldn't record buy-in", e); }
-}
-// The £10 someone sits down with counts as a buy-in too, split by who else is at the table (solo: all against the computer)
+// Every £10 added to a player counts as one buy-in: the opening £10 and every rebuy
+function onRebuy(p) { totalsUpdate({ [`totals/${kindOf(p)}/${p.name}/buyins`]: 1 }); }
 function countOpeningBuyins() {
   if (G.mode === "client") return;
   const up = {};
-  for (const p of G.seats) {
-    if (p.counted || !p.hole.length) continue;
-    p.counted = true;
-    const others = G.seats.filter(q => q !== p && !q.out);
-    const nh = others.filter(q => q.human).length, nb = others.length - nh, base = `totals/${kindOf(p)}/${p.name}`;
-    if (nb) up[`${base}/bots/buyins`] = nb / (nh + nb);
-    if (nh) up[`${base}/humans/buyins`] = nh / (nh + nb);
-  }
+  for (const p of G.seats) { if (p.counted || !p.hole.length) continue; p.counted = true; up[`totals/${kindOf(p)}/${p.name}/buyins`] = 1; }
   totalsUpdate(up);
 }
 function recordLedger(res) {
@@ -1637,8 +1618,6 @@ function recordLedger(res) {
       const kf = kindOf(pf), kt = kindOf(pt);
       add(`totals/${kt}/${t}/${kf}/won`, a);
       add(`totals/${kf}/${f}/${kt}/lost`, a);
-      (pf.lossSince ||= { bots: 0, humans: 0 })[kt] += a;
-      (pt.lossSince ||= { bots: 0, humans: 0 })[kf] -= a;
     }
     for (const p of G.seats) if (p.hole.length && !p.out) add(`totals/${kindOf(p)}/${p.name}/hands`, 1);
     for (const k in up) up[k] = Math.round(up[k] * 100) / 100;
@@ -1680,7 +1659,7 @@ function renderLifetime() {
     ["Computer players vs real players", "bots", "humans"],
   ];
   for (const [title, kind, opp] of tables) {
-    const rows = Object.keys(L[kind] || {}).map(n => ({ n, r: get(kind, n, opp) })).filter(x => x.r.won || x.r.lost || x.r.buyins).sort((a, b) => net(b.r) - net(a.r));
+    const rows = Object.keys(L[kind] || {}).map(n => ({ n, r: get(kind, n, opp), b: (L[kind][n] && L[kind][n].buyins) || 0 })).filter(x => x.r.won || x.r.lost || (opp === "bots" && x.b)).sort((a, b) => net(b.r) - net(a.r));
     const sec = document.createElement("div"); sec.className = "lt-sec";
     const t = document.createElement("h3"); t.textContent = title; sec.append(t);
     if (!rows.length) { const p = document.createElement("p"); p.className = "note"; p.textContent = "Nothing yet."; sec.append(p); box.append(sec); continue; }
@@ -1688,15 +1667,15 @@ function renderLifetime() {
     const tb = document.createElement("table"); tb.className = "lt";
     const head = document.createElement("tr"); ["Player", "Buy-ins", "Won", "Lost", "Net"].forEach((c, i) => { const th = document.createElement("th"); th.textContent = c; if (i) th.className = "num"; head.append(th); });
     tb.append(head);
-    for (const { n, r } of rows) {
+    for (const { n, r, b } of rows) {
       const tr = document.createElement("tr"); if (kind === "humans" && n === meName) tr.className = "me";
       const nv = net(r);
-      [n, (r.buyins || 0).toFixed(1), money(Math.round(r.won || 0)), money(Math.round(r.lost || 0)), (nv > 0 ? "+" : "") + money(Math.round(nv))].forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i) td.className = "num" + (i === 4 ? (nv > 0 ? " pos" : nv < 0 ? " neg" : "") : ""); tr.append(td); });
+      [n, String(Math.round(b)), money(Math.round(r.won || 0)), money(Math.round(r.lost || 0)), (nv > 0 ? "+" : "") + money(Math.round(nv))].forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i) td.className = "num" + (i === 4 ? (nv > 0 ? " pos" : nv < 0 ? " neg" : "") : ""); tr.append(td); });
       tb.append(tr);
     }
     wrap.append(tb); sec.append(wrap); box.append(sec);
   }
-  const n = document.createElement("p"); n.className = "note"; n.textContent = "Won and lost count the money that went between players in each pot. Buy-ins are split by where the money went before each rebuy. Play money only.";
+  const n = document.createElement("p"); n.className = "note"; n.textContent = "Won and lost count the money that went between players in each pot. Buy-ins are every £10 a player has put in (the first £10 and each rebuy), across all their games. Play money only.";
   box.append(n);
 }
 
