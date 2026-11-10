@@ -359,13 +359,13 @@ const PROFILES = {
     limp: -20, limpOnly: true, pairCall: { flop: 100 }, raise: 13, callRaise: 10, callShove: 11, valueR: 1.6, raiseR: 2.2, slow: 0.05, bluff: 0.04, bluffHU: 0.05, callMul: 1.05, minR: 0.8, size: [0.5, 0.7], big: [0.6, 0.8], rebuys: false },
   Evan: { rank: 5, blurb: "Plays like Jesal and folds rubbish (but plays any suited hand), and folds after the flop without a real hand (doesn't bluff-catch), but massively overvalues weak aces (has shoved A2 and A3 pre-flop). Has fallen for Baran's bluffs. Buys in again when he runs out.",
     limp: 4, suitedAny: true, limpCall50: true, raise: 12, callRaise: 8, callShove: 9, aceShove: 0.15, overpairCall: true, valueR: 1.6, raiseR: 2.2, slow: 0.05, bluff: 0.04, bluffHU: 0.05, callMul: 1.2, minR: 0.9, scared: true, size: [0.5, 0.7], big: [0.6, 0.8], rebuys: true },
-  Emils: { rank: 6, blurb: "The fish. Plays every hand and calls to the river with nothing, unless the bet is big (over £2). Only bets or raises when he actually has a good hand.",
-    limp: -9, raise: 13, callRaise: -9, callShove: 6, station: true, nothingCap: 200, valueR: 2.0, raiseR: 2.4, slow: 0, bluff: 0, bluffHU: 0, callMul: 0.3, size: [0.5, 0.8], big: [0.8, 1.1], rebuys: true },
+  Emils: { rank: 6, blurb: "The fish. Limps every hand for 20p, but folds real rubbish after the flop and folds to big pre-flop raises (£5+) without a pair or two high cards. Calls small bets with weak hands. Bets when he has a good hand, but facing a bet he just calls, even with a monster.",
+    limp: -9, raise: 13, callRaise: -9, callShove: 6, station: true, nothingCap: 200, callsMonsters: true, bigRaiseFold: 500, rubbishFold: 50, valueR: 1.6, raiseR: 2.4, slow: 0, bluff: 0, bluffHU: 0, callMul: 0.3, size: [0.5, 0.8], big: [0.8, 1.1], rebuys: true },
 };
 PROFILES.Josh = { rank: 0, blurb: "Plays conservatively and usually makes the right call, fold or raise. Limps most playable hands; loves a £1.50 raise pre-flop (77+, AJ+, KQ) or on the flop with top pair, good kicker or better. Bluffs very, very rarely, though he'll sometimes stab at a heads-up river with a missed ace or king. Limps wide late when others have limped and raises suited aces to £1 in position.",
-  limp: 3, raise: 99, raise150: true, flop150: true, lateLimpAny: 1, suitedAceRaise: 0.35, riverStab: 0.1, callRaise: 9, callShove: 11, valueR: 1.5, raiseR: 2.1, slow: 0.08, bluff: 0.015, bluffHU: 0.025, callMul: 1.08, minR: 0.8, size: [0.5, 0.7], big: [0.7, 0.9], rebuys: true };
+  limp: 3, raise: 99, raise150: true, flop150: true, lateLimpAny: 1, suitedAceRaise: 0.35, riverStab: 0.1, callRaise: 9, callShove: 11, valueR: 1.9, raiseR: 2.1, slow: 0.3, bluff: 0.015, bluffHU: 0.025, callMul: 1.08, minR: 0.8, size: [0.5, 0.7], big: [0.7, 0.9], rebuys: true };
 const SEAT_NAMES = ["Josh", "Vadim", "Saul", "Baran", "Jesal", "Evan", "Emils"];
-const GUESTS = ["Player 1", "Player 2"];  // extra seats for people who aren't one of the 7; no computer version, so they only sit in when someone plays them
+const GUESTS = ["Fin", "Kingsley", "Player 1", "Player 2"];  // extra people beyond the 7: no computer version yet, so they only get a seat while someone plays them
 const ALL_NAMES = SEAT_NAMES.concat(GUESTS);
 const rand = (a, b) => a + Math.random() * (b - a);
 const money = p => (p < 0 ? "-£" : "£") + (Math.abs(p) / 100).toFixed(2);
@@ -554,7 +554,8 @@ function madeCat(hole, board) {
 }
 // Top pair with a kicker of 10 or better, an overpair, or two pair or better using your own cards
 function topPairGood(hole, board) {
-  const mc = madeCat(hole, board); if (mc >= 2) return true;
+  const mc = madeCat(hole, board), boardPaired = new Set(board.map(cardRank)).size < board.length;
+  if (mc >= 3 || (mc === 2 && !boardPaired)) return true;
   const top = Math.max(...board.map(cardRank)), [a, b] = hole.map(cardRank);
   if (a === b) return a > top;
   return mc === 1 && ((a === top && b >= 8) || (b === top && a >= 8));
@@ -605,6 +606,7 @@ function botDecide(i) {
       return { type: "fold" };
     }
     if (c >= 14 && G.raisesThisStreet < 3) return { type: "raise", amount: G.currentBet * 3 };
+    if (pr.station && pr.bigRaiseFold && G.currentBet >= pr.bigRaiseFold) return (hi === lo || lo >= 8) ? { type: "call" } : { type: "fold" };  // Emils: £5+ raise → calls with a pair or two high cards, folds the rest
     if (pr.station) return (toCall <= p.stack * 0.35 || c >= pr.callShove) ? { type: "call" } : { type: "fold" };
     if (pr.aceCallTo && hi === 12 && G.currentBet <= pr.aceCallTo && !shoveSized) return { type: "call" };  // Vadim calls up to £1.50 with any ace
     let need = shoveSized ? pr.callShove : pr.callRaise;
@@ -647,7 +649,8 @@ function botDecide(i) {
   const odds = toCall / (pot + toCall);
   G.think.need = odds;
   if (pr.station) {
-    if (eq > 0.65 && r >= pr.raiseR) return { type: "raise", amount: raiseTo(rand(0.6, 0.9)) };
+    if (!pr.callsMonsters && eq > 0.65 && r >= pr.raiseR) return { type: "raise", amount: raiseTo(rand(0.6, 0.9)) };
+    if (pr.rubbishFold && toCall > pr.rubbishFold && madeCat(p.hole, G.board) < 1 && eq < 0.3 / Math.sqrt(k)) return { type: "fold" };  // no pair, no real draw
     // Emils: with nothing (no pair from his own cards, no real draw) he won't call a big bet, e.g. £5 with king-high
     if (pr.nothingCap && toCall > pr.nothingCap && madeCat(p.hole, G.board) < 1 && eq < 0.25) return { type: "fold" };
     if (river && toCall > p.stack * 0.5 && eq < 0.15) return { type: "fold" };
@@ -1850,7 +1853,7 @@ function renderLobby() {
   ALL_NAMES.forEach(n => { const b = btn(n, n === meName ? "on" : "", () => { setMe(n); lobbyErr = ""; renderLobby(); renderWho(); }); b.setAttribute("aria-pressed", n === meName ? "true" : "false"); names.append(b); });
   L.append(names);
   const why = document.createElement("p"); why.className = "note";
-  why.textContent = "Play as yourself, or as Player 1 or Player 2 if you're not one of the seven. Your decisions are saved so the computer version of you learns to play more like the real you.";
+  why.textContent = "Play as yourself, or as Player 1 or Player 2 if your name isn't here. Your decisions are saved so the computer version of you learns to play more like the real you.";
   L.append(why);
   if (!meName) { const lt = document.createElement("div"); lt.id = "lifetime"; lt.className = "lifetime"; L.append(lt); renderLifetime(); return; }
   const modes = document.createElement("div"); modes.className = "modes";
