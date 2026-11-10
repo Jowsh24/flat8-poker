@@ -1,0 +1,1827 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16130f">
+<title>Flat 8 Poker</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one late-night kitchen-table screen. Oval baize table on top, your controls under it, coach + hand log below. Single dark look by choice. */
+:root {
+  color-scheme: dark;
+  --room: #16130f;        /* dark room around the table */
+  --panel: #221d17;       /* panels */
+  --panel-2: #2c251d;
+  --line: #3b3226;
+  --ink: #f1e9dc;         /* main text */
+  --ink-dim: #b3a691;
+  --felt: #1d5a46;        /* baize */
+  --felt-dark: #123a2e;
+  --rail: #4a2f1d;        /* wooden rail */
+  --rail-hi: #6b4429;
+  --brass: #d9a54a;       /* chips, accent */
+  --brass-ink: #1b1408;
+  --card: #fbf8f1;
+  --card-ink: #1d1a16;
+  --red: #c7362f;
+  --good: #6fc28b;
+  --warn: #e6b450;
+  --bad: #e2675d;
+  --f-display: "Young Serif", Georgia, "Times New Roman", serif;
+  --f-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+html, body { background: var(--room); color: var(--ink); }
+body { font-family: var(--f-body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 14px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px; }
+
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; }
+h1 { font-family: var(--f-display); font-weight: 400; font-size: 1.7rem; margin: 0; letter-spacing: .01em; }
+h1 small { font-family: var(--f-body); font-size: .8rem; color: var(--ink-dim); margin-left: .5em; letter-spacing: .04em; text-transform: uppercase; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: .82rem; color: var(--ink-dim); white-space: nowrap; }
+.stat b { color: var(--ink); font-family: var(--f-mono); font-weight: 700; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.stat b.pos { color: var(--good); } .stat b.neg { color: var(--bad); }
+
+/* Table */
+.table-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9.4; max-width: 100%; }
+.rail { position: absolute; inset: 7% 6%; border-radius: 50% / 50%; background: radial-gradient(ellipse at 50% 30%, var(--rail-hi), var(--rail) 60%); box-shadow: 0 18px 40px rgba(0,0,0,.55), inset 0 2px 0 rgba(255,255,255,.08); }
+.felt { position: absolute; inset: 4.5% 3.2%; border-radius: 50% / 50%; background: radial-gradient(ellipse at 50% 42%, #27735a 0%, var(--felt) 45%, var(--felt-dark) 100%); box-shadow: inset 0 0 40px rgba(0,0,0,.45); }
+.felt-mark { position: absolute; left: 50%; top: 24%; transform: translateX(-50%); font-family: var(--f-display); color: rgba(255,255,255,.09); font-size: clamp(.8rem, 2.2vw, 1.4rem); letter-spacing: .3em; white-space: nowrap; text-transform: uppercase; pointer-events: none; }
+.center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 6px; }
+.board { display: flex; gap: clamp(3px, .7vw, 7px); min-height: var(--ch); }
+.pot { font-family: var(--f-mono); font-weight: 700; font-size: clamp(.75rem, 1.6vw, .95rem); background: rgba(0,0,0,.35); color: var(--brass); padding: 2px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.streetlabel { font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+
+.seat { position: absolute; transform: translate(-50%, -50%); width: clamp(76px, 15vw, 132px); display: grid; justify-items: center; gap: 3px; transition: opacity .2s; }
+.seat .plate { position: relative; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 6px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,.4); }
+.seat .nm { font-weight: 700; font-size: clamp(.72rem, 1.5vw, .9rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seat .stk { font-family: var(--f-mono); font-size: clamp(.68rem, 1.35vw, .82rem); color: var(--brass); font-variant-numeric: tabular-nums; }
+.seat .act { font-size: clamp(.62rem, 1.2vw, .74rem); color: var(--ink-dim); min-height: 1.2em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.seat.turn .plate { border-color: var(--brass); box-shadow: 0 0 0 2px var(--brass), 0 4px 14px rgba(0,0,0,.5); }
+.seat.folded { opacity: .45; }
+.seat.out { opacity: .25; }
+.plate .dealer { left: auto; right: -9px; top: -9px; transform: none; transition: none; z-index: 2; }
+.seat.winner .plate { border-color: var(--good); box-shadow: 0 0 0 2px var(--good); }
+.seat .hole { display: flex; gap: 3px; min-height: var(--cs); }
+.seat .madehand { font-size: clamp(.6rem, 1.15vw, .72rem); font-weight: 700; color: var(--card-ink); background: var(--card); border-radius: 999px; padding: 0 7px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.seat.winner .madehand { background: var(--good); color: #fff; }
+.dealer { position: absolute; width: clamp(16px, 2.4vw, 22px); height: clamp(16px, 2.4vw, 22px); border-radius: 50%; background: var(--card); color: var(--card-ink); font-weight: 800; font-size: clamp(.55rem, 1.1vw, .7rem); display: grid; place-items: center; transform: translate(-50%, -50%); box-shadow: 0 2px 4px rgba(0,0,0,.5); transition: left .4s, top .4s; }
+.betchip { position: absolute; transform: translate(-50%, -50%); font-family: var(--f-mono); font-size: clamp(.62rem, 1.2vw, .76rem); font-weight: 700; color: var(--brass-ink); background: var(--brass); border-radius: 999px; padding: 1px 7px; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,.4); font-variant-numeric: tabular-nums; }
+
+/* Cards */
+:root { --cw: clamp(30px, 6vw, 54px); --ch: calc(var(--cw) * 1.4); --csw: clamp(20px, 3.4vw, 32px); --cs: calc(var(--csw) * 1.4); }
+.card { width: var(--cw); height: var(--ch); border-radius: 6px; background: var(--card); color: var(--card-ink); display: grid; place-items: center; align-content: center; gap: 0; font-weight: 700; box-shadow: 0 2px 5px rgba(0,0,0,.45); line-height: 1; font-size: calc(var(--cw) * .38); animation: deal .25s ease-out; }
+.card .s { font-size: 1.05em; }
+.card.red { color: var(--red); }
+.card.sm { width: var(--csw); height: var(--cs); font-size: calc(var(--csw) * .4); border-radius: 4px; }
+.card.lg { --cw: clamp(44px, 8vw, 64px); }
+.card.back { background: repeating-linear-gradient(45deg, #7a2a24 0 4px, #8f342d 4px 8px); border: 2px solid var(--card); }
+.card.slot { background: rgba(0,0,0,.18); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); animation: none; }
+.card.noanim { animation: none; }
+.seat .act.thinking { color: var(--brass); font-style: italic; }
+.notes-panel { grid-column: 1 / -1; display: grid; gap: 8px; }
+.notes-panel select { background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 8px 10px; font: inherit; align-self: start; }
+.notes-panel textarea { flex: 1 1 240px; min-height: 56px; resize: vertical; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 8px 10px; font: inherit; }
+.notes-list { display: grid; gap: 4px; font-size: .9rem; max-height: 220px; overflow: auto; }
+.noterow { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.realnote label { font-weight: 700; font-size: .9rem; }
+.realnote textarea { width: 100%; min-height: 64px; resize: vertical; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 8px 10px; font: inherit; box-sizing: border-box; }
+@keyframes deal { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .card { animation: none; } .dealer { transition: none; } }
+
+/* Controls */
+.controls { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid; gap: 10px; }
+.yourhand { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.yourhand .cards { display: flex; gap: 6px; }
+.yourhand .info { display: grid; gap: 2px; min-width: 0; }
+.yourhand .info .made { font-weight: 700; }
+.yourhand .info .sub { color: var(--ink-dim); font-size: .85rem; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); padding: 9px 14px; font-weight: 600; }
+button:hover:not(:disabled) { border-color: var(--brass); }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+button.fold { color: var(--bad); }
+button.small { padding: 5px 10px; font-size: .82rem; border-radius: 8px; }
+.raise { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1 1 320px; min-width: 0; }
+.raise input[type=range] { flex: 1 1 140px; accent-color: var(--brass); min-width: 0; }
+.raise .amt { font-family: var(--f-mono); font-weight: 700; color: var(--brass); min-width: 4.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.waiting { color: var(--ink-dim); font-size: .9rem; }
+
+/* Lower panels */
+.lower { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 760px) { .lower { grid-template-columns: minmax(0, 1fr); } .table-wrap { aspect-ratio: 1 / 1.05; } .rail { inset: 9% 3%; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.panel h2 { font-family: var(--f-display); font-weight: 400; font-size: 1.15rem; margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tip { background: var(--panel-2); border-left: 3px solid var(--brass); border-radius: 0 10px 10px 0; padding: 10px 12px; display: grid; gap: 6px; }
+.tip .head { font-weight: 700; }
+.commentary { display: grid; gap: 4px; font-size: .88rem; color: var(--ink-dim); border-left: 3px solid var(--line); padding: 4px 0 4px 10px; }
+.commentary .head { font-weight: 700; color: var(--ink); }
+.tip .nums { font-family: var(--f-mono); font-size: .8rem; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.review { display: grid; gap: 6px; }
+.review .row { display: grid; grid-template-columns: 1.4em minmax(0, 1fr); gap: 6px; font-size: .9rem; }
+.review .row .m { font-weight: 800; }
+.m.good { color: var(--good); } .m.warn { color: var(--warn); } .m.bad { color: var(--bad); }
+.result { font-weight: 700; font-size: 1.05rem; }
+.summary { display: grid; gap: 4px; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; }
+.summary .how { font-size: .9rem; }
+.summary .net { font-family: var(--f-mono); font-size: .85rem; font-variant-numeric: tabular-nums; }
+.summary .net.good { color: var(--good); } .summary .net.bad { color: var(--bad); }
+.subhead { font-weight: 700; font-size: .9rem; margin-top: 4px; }
+.claude-out { white-space: pre-wrap; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; font-size: .9rem; max-height: 420px; overflow: auto; }
+.note { color: var(--ink-dim); font-size: .8rem; }
+.qrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.qrow input { flex: 1 1 180px; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 8px 10px; font: inherit; }
+.log { font-family: var(--f-mono); font-size: .76rem; color: var(--ink-dim); max-height: 340px; overflow: auto; white-space: pre-wrap; background: var(--panel-2); border-radius: 10px; padding: 10px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--ink-dim); cursor: pointer; }
+.toggle input { accent-color: var(--brass); }
+.settings { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+details summary { cursor: pointer; color: var(--ink-dim); font-size: .85rem; }
+.players { display: grid; gap: 6px; font-size: .85rem; }
+.players div b { color: var(--ink); }
+.players div { color: var(--ink-dim); }
+/* Phase 2: who's playing, live tables, peeking */
+[hidden] { display: none !important; }
+body.in-lobby .game { display: none; }
+.lobby { gap: 14px; }
+.lobby h2 { font-size: 1.3rem; }
+.names { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.names button { padding: 12px 10px; font-size: 1rem; }
+.names button.on { background: var(--brass); color: var(--brass-ink); border-color: var(--brass); }
+.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.mode { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; align-content: start; }
+.mode h3 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 1.05rem; }
+.mode input { background: var(--panel); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 9px 10px; font: inherit; font-family: var(--f-mono); text-transform: uppercase; letter-spacing: .15em; min-width: 0; width: 100%; box-sizing: border-box; }
+.err { color: var(--bad); font-size: .9rem; min-height: 1.2em; }
+.who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .85rem; color: var(--ink-dim); }
+.who b { color: var(--ink); }
+.banner { background: var(--panel); border: 1px solid var(--brass); border-radius: 12px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: .9rem; }
+.banner .code { font-family: var(--f-mono); font-weight: 700; color: var(--brass); font-size: 1.15rem; letter-spacing: .15em; }
+.banner .warnmsg { color: var(--warn); }
+.seat.human .nm::after { content: " ●"; color: var(--good); font-size: .7em; vertical-align: middle; }
+.seat.peekable { cursor: pointer; }
+.seat.peekable:hover .plate { border-color: var(--ink-dim); }
+.seat .act.clock { color: var(--warn); font-family: var(--f-mono); font-weight: 700; }
+.clocktxt { font-family: var(--f-mono); color: var(--warn); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Flat 8 Poker <small id="subtitle">practice table</small></h1>
+    <div class="who" id="who"></div>
+    <div class="stats game" id="stats"></div>
+  </header>
+
+  <section class="panel lobby" id="lobby" aria-label="Choose who you are and how to play"></section>
+  <div class="banner game" id="banner" hidden></div>
+
+  <div class="table-wrap game" id="table">
+    <div class="rail"><div class="felt"><div class="felt-mark">Flat 8 · 10p / 20p</div></div></div>
+    <div class="center">
+      <div class="streetlabel" id="street">Pre-flop</div>
+      <div class="board" id="board"></div>
+      <div class="pot" id="pot">Pot £0.00</div>
+    </div>
+  </div>
+
+  <section class="controls game" id="controls" aria-label="Your actions"></section>
+
+  <div class="lower game">
+    <section class="panel" id="coach" aria-label="Coach">
+      <h2 id="coachTitle">Coach</h2>
+      <div id="coachBody"></div>
+    </section>
+    <section class="panel">
+      <h2>Hand log <span class="settings">
+        <label class="toggle"><input type="checkbox" id="optTips"> Coach on</label>
+        <label class="toggle"><input type="checkbox" id="optFast"> Fast opponents</label>
+        <label class="toggle" id="optShowWrap"><input type="checkbox" id="optShow"> Show everyone's cards</label>
+        <label class="toggle" id="optAutoWrap" hidden><input type="checkbox" id="optAuto"> Auto-deal</label>
+        <label class="toggle" title="Reads out every action, the flop, turn and river, and who wins"><input type="checkbox" id="optAudio"> Audio</label>
+      </span></h2>
+      <div class="log" id="log"></div>
+      <details id="playersBox">
+        <summary>Who's at the table</summary>
+        <div class="players" id="playersInfo"></div>
+      </details>
+      <div class="btnrow">
+        <button class="small" id="copyHand">Copy hand history</button>
+        <button class="small" id="resetTable">Reset everyone to £10</button>
+        <span class="note" id="copyNote"></span>
+      </div>
+    </section>
+    <section class="panel notes-panel" aria-label="What would really happen">
+      <h2>What would really happen?</h2>
+      <p class="note">Spot something the real player wouldn't do? Note it here, any time. Notes are saved with the current hand and sent to Josh, so the computer players can be made more like the real ones.</p>
+      <div class="qrow">
+        <select id="noteWho" aria-label="Which player"></select>
+        <textarea id="noteText" placeholder="e.g. Saul would have bet a lot more with trips."></textarea>
+      </div>
+      <div class="btnrow">
+        <button class="small" id="saveNote">Save note</button>
+        <button class="small" id="copyNotes">Copy notes for /poker</button>
+        <span class="note" id="notesMsg"></span>
+      </div>
+      <div class="notes-list" id="notesList"></div>
+    </section>
+  </div>
+</div>
+
+<script id="engine">
+/* ===== Cards and hand evaluation ===== */
+const RANKS = "23456789TJQKA";
+const SUITS = "shdc";
+const SUIT_SYM = { s: "♠", h: "♥", d: "♦", c: "♣" };
+const RANK_NAME = ["2","3","4","5","6","7","8","9","10","Jack","Queen","King","Ace"];
+const CAT = ["High card","Pair","Two pair","Three of a kind","Straight","Flush","Full house","Four of a kind","Straight flush"];
+const cardRank = c => c >> 2, cardSuit = c => c & 3;
+const cardStr = c => (RANKS[c >> 2] === "T" ? "10" : RANKS[c >> 2]) + SUIT_SYM[SUITS[c & 3]];
+
+function rng(n) { // secure random integer in [0, n)
+  if (globalThis.crypto && crypto.getRandomValues) {
+    const a = new Uint32Array(1), lim = Math.floor(0x100000000 / n) * n;
+    do { crypto.getRandomValues(a); } while (a[0] >= lim);
+    return a[0] % n;
+  }
+  return Math.floor(Math.random() * n);
+}
+function newDeck() { const d = []; for (let i = 0; i < 52; i++) d.push(i); for (let i = 51; i > 0; i--) { const j = rng(i + 1); [d[i], d[j]] = [d[j], d[i]]; } return d; }
+
+function rank5(cs) {
+  const r = [cs[0] >> 2, cs[1] >> 2, cs[2] >> 2, cs[3] >> 2, cs[4] >> 2].sort((x, y) => y - x);
+  const s0 = cs[0] & 3;
+  const flush = (cs[1] & 3) === s0 && (cs[2] & 3) === s0 && (cs[3] & 3) === s0 && (cs[4] & 3) === s0;
+  const cnt = new Array(13).fill(0); for (const x of r) cnt[x]++;
+  const groups = []; for (let v = 12; v >= 0; v--) if (cnt[v]) groups.push(v);
+  groups.sort((x, y) => cnt[y] - cnt[x] || y - x);
+  let sh = -1;
+  if (groups.length === 5) { if (r[0] - r[4] === 4) sh = r[0]; else if (r[0] === 12 && r[1] === 3) sh = 3; }
+  let cat, k;
+  if (sh >= 0 && flush) { cat = 8; k = [sh]; }
+  else if (cnt[groups[0]] === 4) { cat = 7; k = groups; }
+  else if (cnt[groups[0]] === 3 && cnt[groups[1]] === 2) { cat = 6; k = groups; }
+  else if (flush) { cat = 5; k = r; }
+  else if (sh >= 0) { cat = 4; k = [sh]; }
+  else if (cnt[groups[0]] === 3) { cat = 3; k = groups; }
+  else if (cnt[groups[0]] === 2 && cnt[groups[1]] === 2) { cat = 2; k = groups; }
+  else if (cnt[groups[0]] === 2) { cat = 1; k = groups; }
+  else { cat = 0; k = r; }
+  let sc = cat; for (let i = 0; i < 5; i++) sc = sc * 13 + (k[i] || 0);
+  return sc;
+}
+const COMBOS = {};
+function combos(n) {
+  if (COMBOS[n]) return COMBOS[n];
+  const out = [];
+  for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (let c = b + 1; c < n; c++) for (let d = c + 1; d < n; d++) for (let e = d + 1; e < n; e++) out.push([a, b, c, d, e]);
+  return (COMBOS[n] = out);
+}
+function bestScore(cards) {
+  let best = -1; const five = [0, 0, 0, 0, 0];
+  for (const cb of combos(cards.length)) { for (let i = 0; i < 5; i++) five[i] = cards[cb[i]]; const s = rank5(five); if (s > best) best = s; }
+  return best;
+}
+function shortDesc(score) {
+  const k = []; let s = score; for (let i = 0; i < 5; i++) { k.unshift(s % 13); s = Math.floor(s / 13); }
+  const r = i => RANKS[k[i]] === "T" ? "10" : RANKS[k[i]];
+  return ["High card " + r(0), `Pair of ${r(0)}s`, `Two pair, ${r(0)}s & ${r(1)}s`, `Three ${r(0)}s`, `Straight to ${r(0)}`, `Flush, ${r(0)} high`, `${r(0)}s full of ${r(1)}s`, `Four ${r(0)}s`, k[0] === 12 ? "Royal flush" : "Straight flush"][s];
+}
+function describe(score) {
+  const k = []; let s = score; for (let i = 0; i < 5; i++) { k.unshift(s % 13); s = Math.floor(s / 13); }
+  const cat = s, n = i => RANK_NAME[k[i]];
+  if (cat === 8) return k[0] === 12 ? "Royal flush" : `Straight flush, ${n(0)} high`;
+  if (cat === 7) return `Four ${n(0)}s`;
+  if (cat === 6) return `Full house, ${n(0)}s full of ${n(1)}s`;
+  if (cat === 5) return `Flush, ${n(0)} high`;
+  if (cat === 4) return `Straight, ${n(0)} high`;
+  if (cat === 3) return `Three ${n(0)}s`;
+  if (cat === 2) return `Two pair, ${n(0)}s and ${n(1)}s`;
+  if (cat === 1) return `Pair of ${n(0)}s`;
+  return `${n(0)} high`;
+}
+
+/* Monte Carlo equity of `hole` on `board` against `opp` random hands. */
+function equity(hole, board, opp, iters) {
+  opp = Math.max(1, Math.min(opp, 6));
+  const used = new Set([...hole, ...board]);
+  const rest = []; for (let i = 0; i < 52; i++) if (!used.has(i)) rest.push(i);
+  const needBoard = 5 - board.length, need = needBoard + opp * 2;
+  let total = 0;
+  const b = board.slice();
+  for (let it = 0; it < iters; it++) {
+    for (let i = 0; i < need; i++) { const j = i + rng(rest.length - i); const t = rest[i]; rest[i] = rest[j]; rest[j] = t; }
+    b.length = board.length; for (let i = 0; i < needBoard; i++) b.push(rest[i]);
+    const mine = bestScore([...hole, ...b]);
+    let better = false, ties = 0;
+    for (let o = 0; o < opp; o++) {
+      const s = bestScore([rest[needBoard + o * 2], rest[needBoard + o * 2 + 1], ...b]);
+      if (s > mine) { better = true; break; } if (s === mine) ties++;
+    }
+    if (!better) total += 1 / (ties + 1);
+  }
+  return total / iters;
+}
+
+/* Chen-style pre-flop score (about -1 for 72 offsuit up to 20 for aces). */
+function chen(hole) {
+  const [a, b] = hole.map(cardRank).sort((x, y) => y - x);
+  const val = r => r === 12 ? 10 : r === 11 ? 8 : r === 10 ? 7 : r === 9 ? 6 : (r + 2) / 2;
+  let s = val(a);
+  if (a === b) return Math.max(5, s * 2);
+  if (cardSuit(hole[0]) === cardSuit(hole[1])) s += 2;
+  const gap = a - b - 1;
+  s -= gap === 0 ? 0 : gap === 1 ? 1 : gap === 2 ? 2 : gap === 3 ? 4 : 5;
+  if (gap <= 1 && a < 10) s += 1;
+  return Math.ceil(s);
+}
+function handLabel(hole) {
+  const [x, y] = hole.slice().sort((p, q) => cardRank(q) - cardRank(p));
+  const r = c => RANKS[cardRank(c)];
+  if (cardRank(x) === cardRank(y)) return r(x) + r(y);
+  return r(x) + r(y) + (cardSuit(x) === cardSuit(y) ? "s" : "o");
+}
+
+/* ===== Players ===== */
+const SB = 10, BB = 20, BUYIN = 1000; // pence
+const PROFILES = {
+  Vadim: { rank: 1, blurb: "Best player. Limps, plays speculative hands (limps any suited hand, and never folds an ace pre-flop: limps, makes it 50p or calls up to £1.50 even with A2) to see turns and rivers, builds pots cleverly when strong, folds well, bluffs only occasionally.",
+    limp: 5, suitedAny: true, anyAce: true, ace50: 0.35, aceCallTo: 150, highLimp: true, raise: 12, callRaise: 8, callShove: 10, cheapCall: { flop: 50, turn: 50, river: 100 }, valueR: 1.5, raiseR: 2.1, slow: 0.45, bluff: 0.06, bluffHU: 0.08, callMul: 1.0, size: [0.55, 0.75], big: [0.7, 0.95], rebuys: true },
+  Saul: { rank: 2, blurb: "Chases speculative hands to the river even when it costs him, checks when weak, bets or raises big when he thinks he'll win (two pair or better), sometimes all-in when very confident. Post-flop bets are £1+. Respects Vadim's bets: folds one pair to his river bets. Rarely bluffs.",
+    limp: 4, highAnyLimp: true, raise: 12, callRaise: 7, callShove: 9, cheapCall: { flop: 50, turn: 50, river: 100 }, valueR: 1.5, raiseR: 2.0, slow: 0.03, bigEq: 0.6, bigMade: 2, bigMin: 150, betMin: 100, respects: { Vadim: { mul: 1.4, riverFold: 0.85 } }, shoveConf: { flop: 0.05, turn: 0.12, river: 0.25 }, bluff: 0.05, bluffHU: 0.06, callMul: 0.7, size: [0.45, 0.6], big: [1.0, 1.3], rebuys: true },
+  Baran: { rank: 3, blurb: "Newer and improving, rebuys happily. Plays almost every hand: only folds pre-flop to a raise above 50p. The table's biggest bluffer, especially heads-up. Bets big with a strong hand (trips or better), especially on the river. It fails more often than it works.",
+    limp: 3, raise: 12, callRaise: 6, callShove: 8, open50: 0.4, cheapAll: true, bigMade: 3, bigMin: 150, riverMin: 300, riverMul: 1.4, cheapCall: { flop: 50, turn: 50, river: 100 }, valueR: 1.4, raiseR: 2.0, slow: 0.1, bluff: 0.14, bluffHU: 0.4, callMul: 0.85, size: [0.6, 0.8], big: [0.75, 1.0], rebuys: true },
+  Jesal: { rank: 4, blurb: "Always limps when it's 20p and no one has raised (wants to see every flop), hates pre-flop raises and rarely calls them. Bets for value, gives up with nothing, rarely bluffs. Plays his £10 until it's gone.",
+    limp: -20, limpOnly: true, pairCall: { flop: 100 }, raise: 13, callRaise: 10, callShove: 11, valueR: 1.6, raiseR: 2.2, slow: 0.05, bluff: 0.04, bluffHU: 0.05, callMul: 1.05, minR: 0.8, size: [0.5, 0.7], big: [0.6, 0.8], rebuys: false },
+  Evan: { rank: 5, blurb: "Plays like Jesal and folds rubbish (but plays any suited hand), and folds after the flop without a real hand (doesn't bluff-catch), but massively overvalues weak aces (has shoved A2 and A3 pre-flop). Has fallen for Baran's bluffs. Buys in again when he runs out.",
+    limp: 4, suitedAny: true, raise: 12, callRaise: 8, callShove: 9, aceShove: 0.15, overpairCall: true, valueR: 1.6, raiseR: 2.2, slow: 0.05, bluff: 0.04, bluffHU: 0.05, callMul: 1.2, minR: 0.9, scared: true, size: [0.5, 0.7], big: [0.6, 0.8], rebuys: true },
+  Emils: { rank: 6, blurb: "The fish. Plays every hand and calls to the river with nothing, unless the bet is big (over £2). Only bets or raises when he actually has a good hand.",
+    limp: -9, raise: 13, callRaise: -9, callShove: 6, station: true, nothingCap: 200, valueR: 2.0, raiseR: 2.4, slow: 0, bluff: 0, bluffHU: 0, callMul: 0.3, size: [0.5, 0.8], big: [0.8, 1.1], rebuys: true },
+};
+PROFILES.Josh = { rank: 0, blurb: "Plays conservatively and usually makes the right call, fold or raise. Limps most playable hands; loves a £1.50 raise pre-flop (77+, AJ+, KQ) or on the flop with top pair, good kicker or better. Bluffs very, very rarely.",
+  limp: 3, raise: 99, raise150: true, flop150: true, callRaise: 9, callShove: 11, valueR: 1.5, raiseR: 2.1, slow: 0.08, bluff: 0.015, bluffHU: 0.025, callMul: 1.08, minR: 0.8, size: [0.5, 0.7], big: [0.7, 0.9], rebuys: true };
+const SEAT_NAMES = ["Josh", "Vadim", "Saul", "Baran", "Jesal", "Evan", "Emils"];
+const rand = (a, b) => a + Math.random() * (b - a);
+const money = p => (p < 0 ? "-£" : "£") + (Math.abs(p) / 100).toFixed(2);
+const short = p => p < 100 ? p + "p" : money(p);
+const round10 = x => Math.max(10, Math.round(x / 10) * 10);
+/* House betting steps: 50p, £1, £1.50, £2, then whole pounds, or all-in */
+const LADDER = [50, 100, 150, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1500, 2000];
+function betOptions(p) {
+  const maxTo = p.bet + p.stack;
+  const steps = LADDER.filter(v => v > G.currentBet && v < maxTo);
+  return [...steps, maxTo];
+}
+function snapTo(amount, p) {
+  const opts = betOptions(p);
+  let best = opts[0];
+  for (const v of opts) if (Math.abs(v - amount) < Math.abs(best - amount) || (Math.abs(v - amount) === Math.abs(best - amount) && v > best)) best = v;
+  return best;
+}
+const nearestStep = v => LADDER.reduce((b, x) => Math.abs(x - v) < Math.abs(b - v) ? x : b, LADDER[0]);
+
+/* ===== Game state ===== */
+function freshSeats() {
+  return SEAT_NAMES.map((name, i) => ({ name, hero: i === ME, human: i === ME, stack: BUYIN, buyins: 1, out: false, hole: [], folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "", shown: false }));
+}
+let ME = 0;  // seat index of the person playing on this device
+const G = { mode: "solo", acts: [], actN: 0, seats: freshSeats(), button: 6, board: [], deck: [], street: "idle", currentBet: 0, minRaise: BB, toAct: -1, handNo: 0, log: [], heroDec: [], lastAggr: -1, raisesThisStreet: 0, result: null, waitingHero: false, timer: null };
+
+const inHand = p => !p.out && p.hole.length && !p.folded;
+const canAct = p => inHand(p) && !p.allIn;
+const potTotal = () => G.seats.reduce((s, p) => s + p.committed, 0);
+function nextIdx(i, pred) { for (let k = 1; k <= 7; k++) { const j = (i + k) % 7; if (pred(G.seats[j])) return j; } return -1; }
+function log(line) { G.log.push(line); }
+
+function post(i, amt) {
+  const p = G.seats[i]; const a = Math.min(amt, p.stack);
+  p.stack -= a; p.bet += a; p.committed += a; if (p.stack === 0) p.allIn = true; return a;
+}
+
+function startHand() {
+  const rebuyNotes = [];
+  for (const p of G.seats) {
+    if (p.human && G.mode === "host" && p.stack < 50) { p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`); continue; }
+    if (!p.human && (p.out ? PROFILES[p.name].rebuys : (p.stack === 0 || (p.stack < 50 && PROFILES[p.name].rebuys)))) {
+      if (PROFILES[p.name].rebuys) { p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`); }
+      else { p.out = true; rebuyNotes.push(`${p.name} is out of chips and sits out.`); }
+    }
+  }
+  const hero = G.seats[ME];
+  if (G.mode === "solo" && hero.stack === 0) return "hero-broke";
+  const active = G.seats.filter(p => !p.out && p.stack > 0);
+  if (active.length < 2) return "no-players";
+
+  G.handNo++; G.heroStart = G.seats[ME] ? G.seats[ME].stack : 0; G.board = []; G.deck = newDeck(); G.log = []; G.heroDec = []; G.result = null; G.lastAggr = -1; G.raisesThisStreet = 0; G.acts = []; G.peek = new Set();
+  for (const p of G.seats) { p.hole = []; p.folded = p.out || p.stack === 0; p.allIn = false; p.bet = 0; p.committed = 0; p.acted = false; p.lastAct = ""; p.shown = false; p.thinking = false; }
+  G.button = nextIdx(G.button, p => !p.folded);
+  const heads = active.length === 2;
+  const sbI = heads ? G.button : nextIdx(G.button, p => !p.folded);
+  const bbI = nextIdx(sbI, p => !p.folded);
+  G.sbI = sbI; G.bbI = bbI;
+  log(`Hand ${G.handNo} · button ${G.seats[G.button].name}`);
+  for (const n of rebuyNotes) log(n);
+  log(`${G.seats[sbI].name} posts SB ${short(post(sbI, SB))}, ${G.seats[bbI].name} posts BB ${short(post(bbI, BB))}`);
+  for (let r = 0; r < 2; r++) for (let k = 1; k <= 7; k++) { const p = G.seats[(G.button + k) % 7]; if (!p.folded) p.hole.push(G.deck.pop()); }
+  if (G.mode === "solo") log(`${hero.name} is dealt ${hero.hole.map(cardStr).join(" ")}`);
+  G.street = "preflop"; G.currentBet = BB; G.minRaise = BB;
+  G.toAct = nextIdx(bbI, canAct);
+  return "ok";
+}
+
+function needsAction(p) { return canAct(p) && (!p.acted || p.bet < G.currentBet); }
+function roundComplete() {
+  const able = G.seats.filter(canAct);
+  if (able.length === 0) return true;
+  if (able.length === 1 && able[0].bet >= G.currentBet) return true;
+  return !G.seats.some(needsAction);
+}
+
+/* Apply an action. type: fold | check | call | raise (amount = total bet this street). */
+function apply(i, type, amount) {
+  const p = G.seats[i]; const toCall = G.currentBet - p.bet; const st = G.street;
+  if (type === "check" && toCall > 0) type = "call";
+  if (type === "fold") { p.folded = true; p.lastAct = "Fold"; log(`${st}: ${p.name} folds`); G.say = "folds"; }
+  else if (type === "check") { p.lastAct = "Check"; log(`${st}: ${p.name} checks`); G.say = "checks"; }
+  else if (type === "call") {
+    const a = post(i, toCall); p.lastAct = p.allIn ? `All-in ${short(p.bet)}` : `Call ${short(a)}`;
+    log(`${st}: ${p.name} ${G.currentBet === BB && st === "preflop" && a <= BB ? (a === 0 ? "checks" : "limps " + short(a)) : "calls " + short(a)}${p.allIn ? " (all-in)" : ""}`);
+    G.say = a === 0 ? "checks" : p.allIn ? `calls, all in for ${spokenMoney(p.bet)}` : "calls";
+  } else if (type === "raise") {
+    const maxTo = p.bet + p.stack;
+    let to = snapTo(Math.min(amount, maxTo), p);
+    if (to <= G.currentBet) return apply(i, "call");
+    const raiseBy = to - G.currentBet;
+    post(i, to - p.bet);
+    const wasBet = G.currentBet === 0;
+    G.minRaise = Math.max(BB, raiseBy); for (const q of G.seats) if (q !== p) q.acted = false;
+    G.currentBet = to; G.lastAggr = i; G.raisesThisStreet++;
+    p.lastAct = (p.allIn ? "All-in " : wasBet ? "Bet " : "Raise to ") + short(to);
+    log(`${st}: ${p.name} ${p.allIn ? "goes all-in for" : wasBet ? "bets" : "raises to"} ${short(to)}`);
+    G.say = `${p.allIn ? "goes all in for" : wasBet ? "bets" : "raises to"} ${spokenMoney(to)}`;
+  }
+  p.acted = true; G.actN++;
+  G.acts.push(`${p.name}: ${p.lastAct}`);
+  if (G.say) setSay({ who: p.name, text: G.say });
+}
+function setSay(x) { G.say = x; G.sayEv = { n: ((G.sayEv && G.sayEv.n) || 0) + 1, x }; }
+
+function dealStreet() {
+  G.deck.pop();
+  const n = G.board.length === 0 ? 3 : 1;
+  for (let k = 0; k < n; k++) G.board.push(G.deck.pop());
+  G.street = G.board.length === 3 ? "flop" : G.board.length === 4 ? "turn" : "river";
+  log(`— ${G.street[0].toUpperCase() + G.street.slice(1)}: ${G.board.map(cardStr).join(" ")}  (pot ${money(potTotal())})`);
+}
+function startStreet() {
+  for (const p of G.seats) { p.bet = 0; p.acted = false; if (inHand(p) && !p.allIn) p.lastAct = ""; }
+  G.currentBet = 0; G.minRaise = BB; G.raisesThisStreet = 0; G.lastAggr = -1;
+  G.toAct = nextIdx(G.button, canAct); G.acts = [];
+}
+
+/* Settle the pot. Returns {winners:[{name, amount, hand}], showdown:bool}. */
+function settle() {
+  const live = G.seats.filter(inHand);
+  const res = { showdown: live.length > 1, winners: [], hands: [] };
+  if (live.length === 1) {
+    const amt = potTotal(); live[0].stack += amt; res.winners.push({ name: live[0].name, amount: amt });
+    log(`${live[0].name} wins ${money(amt)} (everyone else folded)`);
+  } else {
+    const scores = new Map(live.map(p => [p, bestScore([...p.hole, ...G.board])]));
+    for (const p of live) { p.shown = true; res.hands.push({ name: p.name, hole: p.hole, desc: describe(scores.get(p)) }); log(`${p.name} shows ${p.hole.map(cardStr).join(" ")}: ${describe(scores.get(p))}`); }
+    const levels = [...new Set(live.map(p => p.committed))].sort((a, b) => a - b);
+    let prev = 0, paid = 0; const won = new Map(); const notes = []; let firstWs = null;
+    for (const lv of levels) {
+      let pot = 0; for (const q of G.seats) pot += Math.min(q.committed, lv) - Math.min(q.committed, prev);
+      const elig = live.filter(p => p.committed >= lv);
+      const top = Math.max(...elig.map(p => scores.get(p)));
+      const ws = elig.filter(p => scores.get(p) === top);
+      const share = Math.floor(pot / ws.length / 10) * 10; let rem = pot - share * ws.length;
+      for (const w of ws) { let a = share; if (rem > 0) { a += rem; rem = 0; } w.stack += a; won.set(w, (won.get(w) || 0) + a); }
+      if (!firstWs) firstWs = ws;
+      else if (pot > 0 && ws.some(w => !firstWs.includes(w))) {
+        const short_ = live.filter(p => p.committed < lv && scores.get(p) > top).map(p => p.name);
+        if (short_.length) notes.push(`${ws.map(w => w.name).join(" and ")} won a side pot of ${money(pot)}. ${short_.join(" and ")} had the better hand but ${short_.length > 1 ? "were" : "was"} all-in for less, so could only win the matching amount from each player.`);
+      }
+      paid += pot; prev = lv;
+    }
+    const leftover = potTotal() - paid;
+    if (leftover > 0) { const w = [...won.keys()][0]; w.stack += leftover; won.set(w, won.get(w) + leftover); }
+    for (const [w, a] of won) { res.winners.push({ name: w.name, amount: a, hand: describe(scores.get(w)) }); log(`${w.name} wins ${money(a)} with ${describe(scores.get(w))}`); }
+    res.notes = notes; notes.forEach(n => log(`(${n})`));
+  }
+  for (const p of G.seats) p.committed = 0;
+  return res;
+}
+
+/* ===== Opponent brains ===== */
+// Saul, Baran and Vadim aren't put off by a really small bet, or once they've already put a lot in
+function wontFold(name, toCall, committed, street) {
+  const cc = PROFILES[name] && PROFILES[name].cheapCall;
+  if (!cc) return null;
+  if (toCall <= (cc[street] || 0)) return "small";
+  if (committed >= 100 && toCall <= committed * 0.5) return "invested";
+  return null;
+}
+// Hand category (0 high card .. 8 straight flush) of hole+board, or -1 if the hole cards don't improve on the board alone
+function madeCat(hole, board) {
+  if (board.length < 3) return -1;
+  const cat = sc => Math.floor(sc / 371293);  // 13^5
+  const mine = bestScore(hole.concat(board));
+  if (board.length === 5) { if (cat(bestScore(board)) >= cat(mine)) return -1; }
+  else {  // under 5 board cards: only pairs/trips/quads possible on the board alone
+    const n = {}; board.forEach(c => n[cardRank(c)] = (n[cardRank(c)] || 0) + 1);
+    const v = Object.values(n).sort((x, y) => y - x);
+    const bc = v[0] === 4 ? 7 : v[0] === 3 ? 3 : v[0] === 2 ? (v[1] === 2 ? 2 : 1) : 0;
+    if (cat(mine) <= bc) return -1;
+  }
+  return cat(mine);
+}
+// Top pair with a kicker of 10 or better, an overpair, or two pair or better using your own cards
+function topPairGood(hole, board) {
+  const mc = madeCat(hole, board); if (mc >= 2) return true;
+  const top = Math.max(...board.map(cardRank)), [a, b] = hole.map(cardRank);
+  if (a === b) return a > top;
+  return mc === 1 && ((a === top && b >= 8) || (b === top && a >= 8));
+}
+function botDecide(i) {
+  const p = G.seats[i], pr = PROFILES[p.name];
+  const toCall = G.currentBet - p.bet, pot = potTotal();
+  const raiseTo = frac => G.currentBet + Math.max(G.minRaise, round10((pot + toCall) * frac));
+  G.think = { toCall, stack: p.stack, pot, eq: null, need: null, facingRaise: G.currentBet > BB };
+  if (G.street === "preflop") {
+    const c = chen(p.hole);
+    const facingRaise = G.currentBet > BB;
+    const limpers = G.seats.filter(q => q !== p && inHand(q) && q.bet === BB).length;
+    const hi = Math.max(cardRank(p.hole[0]), cardRank(p.hole[1])), lo = Math.min(cardRank(p.hole[0]), cardRank(p.hole[1]));
+    const weakAce = hi === 12 && lo <= 7;
+    const suitedPlay = (pr.suitedAny && cardSuit(p.hole[0]) === cardSuit(p.hole[1])) || (pr.anyAce && hi === 12);  // plays any suited hand / any ace cheaply
+    const highPlay = (pr.highLimp && hi >= 10 && lo >= 6) || (pr.highAnyLimp && hi >= 10);  // Vadim limps a Q/K with an 8+ (e.g. Q8o); Saul limps any Q/K/A (e.g. Q4o)
+    // Josh: a £1.50 raise with 77+, AJ+ or KQ; re-raises only the real premiums (QQ+, AK)
+    if (pr.raise150) {
+      const pair = hi === lo, inSet = (pair && hi >= 5) || (hi === 12 && lo >= 9) || (hi === 11 && lo === 10);
+      const premium = (pair && hi >= 10) || (hi === 12 && lo === 11);
+      if (inSet) {
+        if (G.currentBet < 150 && G.raisesThisStreet < 3) return { type: "raise", amount: 150 };
+        if (premium && G.raisesThisStreet < 3) return { type: "raise", amount: G.currentBet * 3 };
+        if (G.currentBet <= 300 || premium || (pair && hi >= 8)) return { type: "call" };
+        return { type: "fold" };
+      }
+    }
+    if (pr.aceShove && weakAce && Math.random() < pr.aceShove) return { type: "raise", amount: p.bet + p.stack };
+    if (!facingRaise) {
+      if (pr.open50 && c >= pr.limp && G.currentBet === BB && Math.random() < pr.open50) return { type: "raise", amount: 50 };
+      if (c >= pr.raise && !pr.limpOnly) return { type: "raise", amount: BB * 3 + BB * limpers };  // Jesal never raises a 20p pot: he always just limps
+      if (pr.anyAce && hi === 12 && G.currentBet === BB && Math.random() < pr.ace50) return { type: "raise", amount: 50 };  // Vadim: "might even raise A2 a little"
+      if (toCall === 0) return { type: "check" };
+      const thresh = i === G.sbI ? pr.limp - 1 : pr.limp;
+      if (pr.cheapAll || suitedPlay || highPlay || (c >= thresh && (!pr.limpProb || Math.random() < pr.limpProb || c >= 6))) return { type: "call" };
+      return { type: "fold" };
+    }
+    const shoveSized = toCall >= p.stack * 0.5;
+    if (G.currentBet <= 50 && c < 14) {  // a 50p raise (usually Baran) gets treated almost like a limp
+      if (c >= pr.raise && G.raisesThisStreet < 2) return { type: "raise", amount: 150 };
+      if (pr.station || pr.cheapAll || suitedPlay || c >= pr.limp + 1) return { type: "call" };
+      return { type: "fold" };
+    }
+    if (c >= 14 && G.raisesThisStreet < 3) return { type: "raise", amount: G.currentBet * 3 };
+    if (pr.station) return (toCall <= p.stack * 0.35 || c >= pr.callShove) ? { type: "call" } : { type: "fold" };
+    if (pr.aceCallTo && hi === 12 && G.currentBet <= pr.aceCallTo && !shoveSized) return { type: "call" };  // Vadim calls up to £1.50 with any ace
+    let need = shoveSized ? pr.callShove : pr.callRaise;
+    if (pr.aceShove && hi === 12) need = Math.min(need, 5);
+    return c >= need ? { type: "call" } : { type: "fold" };
+  }
+  const k = G.seats.filter(q => q !== p && inHand(q)).length;
+  const eq = equity(p.hole, G.board, Math.min(k, 4), 220);
+  G.think.eq = eq;
+  const r = eq * (k + 1);
+  const hu = k === 1;
+  const river = G.street === "river";
+  // Saul: when he thinks he'll win (two pair or better with his own cards) he bets or raises big, and goes all-in when very confident (trips or better)
+  const mc = pr.bigMade ? madeCat(p.hole, G.board) : -1;
+  const strongMade = pr.bigMade && mc >= pr.bigMade && eq > 0.3;
+  const shoveNow = strongMade && (mc >= 3 || eq > 0.85) && Math.random() < ((pr.shoveConf || {})[G.street] || 0);
+  if (shoveNow && G.raisesThisStreet < 2) return { type: "raise", amount: p.bet + p.stack };
+  // Josh: top pair with a good kicker or better on the flop → £1.50 (bet, or raise a smaller bet); bigger hands raise a bigger bet
+  if (pr.flop150 && G.street === "flop" && topPairGood(p.hole, G.board)) {
+    if (G.currentBet < 150 && G.raisesThisStreet < 2) return { type: "raise", amount: 150 };
+    if (madeCat(p.hole, G.board) >= 2 && G.raisesThisStreet < 2 && Math.random() < 0.6) return { type: "raise", amount: raiseTo(rand(0.8, 1.0)) };
+    if (toCall <= p.stack * 0.5) return { type: "call" };
+  }
+  if (toCall === 0) {
+    if (r >= pr.raiseR && eq > 0.7 && !river && Math.random() < pr.slow) return { type: "check" };
+    // Saul: two pair or better (using his own cards) gets a big bet, whatever the multi-way equity says
+    if (r >= pr.valueR || strongMade) {
+      const s = (eq > (pr.bigEq || 0.75) || strongMade) ? pr.big : pr.size;
+      // Confident bets have a floor (Saul £1.50, even into a tiny pot); some players go bigger again on the river (Baran with a straight)
+      const mul = strongMade && river ? (pr.riverMul || 1) : 1;
+      const floor = strongMade ? (river && pr.riverMin ? pr.riverMin : (pr.bigMin || 0)) : 0;
+      return { type: "raise", amount: Math.max(BB, floor, pr.betMin || 0, round10(pot * rand(s[0], s[1]) * mul)) };
+    }
+    const bp = hu ? pr.bluffHU : pr.bluff;
+    if ((!river || r < 0.7) && Math.random() < bp) return { type: "raise", amount: Math.max(BB, pr.betMin || 0, round10(pot * rand(pr.big[0], pr.big[1]))) };
+    return { type: "check" };
+  }
+  const odds = toCall / (pot + toCall);
+  G.think.need = odds;
+  if (pr.station) {
+    if (eq > 0.65 && r >= pr.raiseR) return { type: "raise", amount: raiseTo(rand(0.6, 0.9)) };
+    // Emils: with nothing (no pair from his own cards, no real draw) he won't call a big bet, e.g. £5 with king-high
+    if (pr.nothingCap && toCall > pr.nothingCap && madeCat(p.hole, G.board) < 1 && eq < 0.25) return { type: "fold" };
+    if (river && toCall > p.stack * 0.5 && eq < 0.15) return { type: "fold" };
+    if (toCall > p.stack * 0.7 && eq < 0.3) return { type: "fold" };
+    return { type: "call" };
+  }
+  if (strongMade && G.raisesThisStreet < 2) return { type: "raise", amount: raiseTo(rand(pr.big[0], pr.big[1])) };
+  if (r >= pr.raiseR && eq > Math.min(0.6, pr.bigEq || 1) && Math.random() > pr.slow * 0.5 && G.raisesThisStreet < 3) return { type: "raise", amount: raiseTo(rand(pr.big[0], pr.big[1])) };
+  if (hu && pr.bluffHU > 0.2 && Math.random() < pr.bluffHU * 0.25 && G.raisesThisStreet < 2) return { type: "raise", amount: raiseTo(rand(0.8, 1.1)) };
+  // Saul respects Vadim: on the river, facing £1+ from Vadim with one pair or less, he usually folds
+  const aggrP = G.seats[G.lastAggr];
+  const resp = pr.respects && aggrP && pr.respects[aggrP.name];
+  if (resp && river && toCall >= 100 && madeCat(p.hole, G.board) <= 1 && Math.random() < resp.riverFold) return { type: "fold" };
+  // Evan: an overpair (e.g. 88 on 6-5-2) never gets folded on the flop, unless it's most of his stack
+  if (pr.overpairCall && G.street === "flop" && cardRank(p.hole[0]) === cardRank(p.hole[1]) && G.board.every(c => cardRank(c) < cardRank(p.hole[0])) && toCall <= p.stack * 0.5) return { type: "call" };
+  // Jesal: any pair (even 22 under the board) calls a flop bet up to £1
+  if (pr.pairCall && toCall <= (pr.pairCall[G.street] || 0) && madeCat(p.hole, G.board) >= 1) return { type: "call" };
+  // "It's only 90p": small bets in pounds get called for the sake of it, whatever the pot odds say
+  if (wontFold(p.name, toCall, p.committed, G.street) && (eq > 0.04 || Math.random() < 0.6)) return { type: "call" };
+  let need = odds * pr.callMul;
+  if (river) need = Math.max(need, odds * 0.95);
+  if (pr.scared && toCall > pot * 0.6) need *= 1.3;
+  const aggr = G.seats[G.lastAggr];
+  if (aggr && aggr.name === "Baran" && hu) need *= 0.85;
+  if (resp) need *= resp.mul;
+  if (pr.minR && r < pr.minR && eq < need * 1.3) return { type: "fold" };
+  return eq >= need ? { type: "call" } : { type: "fold" };
+}
+
+/* ===== Coach ===== */
+/* ===== Player reads: what each flatmate's actions mean ===== */
+function wetBoard(b) {
+  if (b.length < 3) return false;
+  const s = [0, 0, 0, 0]; b.forEach(c => s[cardSuit(c)]++);
+  if (Math.max(...s) >= 2 && b.length < 5) return true;
+  if (Math.max(...s) >= 3) return true;
+  const r = [...new Set(b.map(cardRank))].sort((x, y) => x - y);
+  for (let i = 0; i + 2 < r.length; i++) if (r[i + 2] - r[i] <= 4) return true;
+  return false;
+}
+const aceOnBoard = b => b.some(c => cardRank(c) === 12);
+// How much to trust a bet: m scales your equity (lower = their range is stronger)
+// Only Josh gets the player-specific reads; everyone else gets a generic coach
+const FULL = () => G.seats[ME] && G.seats[ME].name === "Josh";
+function readBet(name, frac, hu, street, board) {
+  const big = frac >= 0.75;
+  if (!FULL()) return { m: street === "river" ? 0.8 : 0.85, t: big ? "A big bet at this table usually means a strong hand." : "" };
+  let r;
+  switch (name) {
+    case "Vadim": r = big ? { m: 0.65, t: "A big bet from Vadim means a strong hand. He builds pots when he has it and rarely bluffs." }
+                          : { m: 0.8, t: "Vadim's smaller bets are often him building the pot with a good hand. He folds his misses, so he's rarely betting rubbish." }; break;
+    case "Saul": r = big ? { m: 0.6, t: "Saul bets big when he's confident. Believe it: usually two pair or better, or a draw that's just come in." }
+                         : { m: 0.85, t: "A bet this size from Saul is less scary than his big ones. When he's really strong he bets big, so this is more often a medium hand." }; break;
+    case "Baran": r = hu ? { m: 1.1, t: "Baran bluffs a lot heads-up. Call down lighter than usual; don't fold a decent pair to one bet." }
+                         : { m: 0.9, t: "Baran bluffs more than anyone, though less into several players. Treat this as a medium-strength range." }; break;
+    case "Jesal": r = { m: 0.7, t: "Jesal only bets for value and gives up with nothing. A bet means he has something; let your weak pairs go." }; break;
+    case "Evan": r = aceOnBoard(board) ? { m: 0.9, t: "Evan overrates weak aces, and there's an ace out. He could easily be betting an ace with a poor kicker." }
+                                       : { m: 0.8, t: "Evan bets for value and rarely bluffs. Respect it unless an ace is on the board." }; break;
+    case "Emils": r = { m: 0.6, t: "Emils calls everything but only bets with a genuinely good hand. When he bets, believe him." }; break;
+    default: r = { m: 0.8, t: "" };
+  }
+  if (street === "river" && name !== "Baran") r = { m: r.m * 0.95, t: r.t };
+  return r;
+}
+const CALLER = {
+  Vadim: "Vadim calling means a real hand or a good draw; he folds his misses.",
+  Saul: "Saul calling often means a draw. Make him pay, and slow down if the draw comes in and he bets big.",
+  Baran: "Baran calling might be him setting up a bluff on a later street.",
+  Jesal: "Jesal calling means he has something decent, but he isn't raising, so it's rarely a monster.",
+  Evan: "Evan calling often means a pair or a weak ace he likes too much.",
+  Emils: "Emils calling a small bet means nothing: he calls with anything. If he calls a big one (over £2), he has at least a pair or a draw.",
+};
+function noteHints(names) {
+  if (typeof getNotes !== "function") return [];
+  const n = getNotes().filter(x => names.includes(x.who)).slice(-2);
+  return n.map(x => `Your note on ${x.who}: "${x.note}"`);
+}
+/* Why an opponent probably did that: uses only what Josh can see (who, action, size, street), never their cards */
+function explainAction(i, type, amount) {
+  if (!FULL() && G.mode === "solo") return null;
+  const p = G.seats[i], n = p.name, pot = potTotal(), toCall = G.currentBet - p.bet;
+  const opps = G.seats.filter(q => q !== p && inHand(q)), hu = opps.length === 1;
+  if (type === "check" && toCall > 0) type = "call";
+  const to = type === "raise" ? Math.min(snapTo(Math.min(amount, p.bet + p.stack), p), p.bet + p.stack) : 0;
+  const allIn = type === "raise" ? to >= p.bet + p.stack : type === "call" && toCall >= p.stack;
+  if (G.street === "preflop") {
+    if (type === "raise") {
+      if (to <= 50) return n === "Baran" ? "Baran opens to 50p: he does this with lots of hands, so it doesn't mean much." : n === "Vadim" ? "Vadim makes it 50p: he does this with any ace (even A2) as well as decent hands, so it's not a monster." : `${n} raises to 50p. Small, but ${n} rarely raises, so probably a decent hand.`;
+      if (n === "Evan" && allIn) return "Evan shoves: he does this with weak aces like A2 and A3, as well as big hands.";
+      if (n === "Emils") return "Emils raising is rare: he has a genuinely good hand.";
+      return `${n} raises to ${short(to)}. At this table that means a really strong hand: big pairs or big aces.`;
+    }
+    if (type === "call" && G.currentBet > 50) {
+      if (n === "Emils") return "Emils calls the raise. He calls with anything, so it tells you little.";
+      if (n === "Saul") return "Saul calls the raise. Often a speculative hand (suited or connected cards) he wants to chase with.";
+      if (n === "Baran") return "Baran calls the raise. His range is wide, so he could have a lot of hands here.";
+      return `${n} calls the raise: a decent hand, but probably not strong enough to re-raise.`;
+    }
+    return null;
+  }
+  if (type === "raise") {
+    const frac = (to - G.currentBet) / Math.max(1, pot + toCall);
+    if (G.currentBet === 0) {
+      const rd = readBet(n, frac, hu, G.street, G.board);
+      return `${n} ${allIn ? "goes all-in for" : "bets"} ${short(to)}${allIn ? "" : frac >= 0.75 ? " (a big bet)" : frac <= 0.45 ? " (a small bet)" : " (a medium-sized bet)"}. ${rd.t}`;
+    }
+    return n === "Baran" ? `Baran raises to ${short(to)}. Raises are rare here, but Baran is the one who bluffs with them, especially heads-up.`
+                         : `${n} raises to ${short(to)}. Raises after the flop are rare at this table: usually two pair or better.`;
+  }
+  if (type === "call") {
+    const wf = wontFold(n, toCall, p.committed, G.street);
+    if (wf === "small" && toCall >= pot * 0.3) return `${n} calls ${short(Math.min(toCall, p.stack))}. To him it's "only ${short(toCall)}": he won't fold to a bet that small, so the call doesn't mean he's strong.`;
+    if (wf === "invested" && toCall >= pot * 0.3) return `${n} calls ${short(Math.min(toCall, p.stack))}. He'd already put ${short(p.committed)} in, so he wasn't going to give up for that much more. The call doesn't mean he's strong.`;
+    if (toCall >= pot * 0.5 || G.street === "river" || allIn) return CALLER[n] ? `${n} calls ${short(Math.min(toCall, p.stack))}. ${CALLER[n]}` : null;
+    return null;
+  }
+  if (type === "check" && n === "Saul" && hu && opps[0].name === "Josh") return "Saul checks. He usually checks when he has little.";
+  return null;
+}
+function heroAdvice() {
+  if (!FULL()) return genericAdvice();
+  const h = G.seats[ME], toCall = G.currentBet - h.bet, pot = potTotal();
+  const opps = G.seats.filter(q => !q.hero && inHand(q));
+  const names = opps.map(q => q.name);
+  const k = opps.length, hu = k === 1;
+  const has = n => names.includes(n);
+  const aggr = G.lastAggr >= 0 ? G.seats[G.lastAggr] : null;
+  const out = { head: "", why: [], eq: null, need: null };
+  if (G.street === "preflop") {
+    const c = chen(h.hole), lbl = handLabel(h.hole);
+    const limpers = G.seats.filter(q => !q.hero && inHand(q) && q.bet === BB && q.committed === BB);
+    if (G.currentBet > BB) {
+      const raiser = aggr ? aggr.name : "Someone";
+      const evanShove = aggr && aggr.name === "Evan" && aggr.allIn;
+      if (G.currentBet <= 50 && c < 14) {
+        out.why.push(`${raiser === "Baran" ? "Baran's 50p is his usual opener, not a big hand." : raiser === "Vadim" ? "Vadim's 50p is often just an ace, even a weak one." : `A 50p raise from ${raiser} is small.`} It only costs ${short(toCall)} more.`);
+        if (c >= 10) out.head = `Raise to £1.50: ${lbl} is well ahead of a 50p opening range.`;
+        else if (c >= 5) out.head = `Call: ${lbl} is worth ${short(toCall)} in a multi-way pot.`;
+        else out.head = `Fold: ${lbl} is too weak, even for ${short(toCall)}.`;
+        out.why.push(...noteHints(names)); out.why.push(`Hand strength score: ${c} (premium 12+, trash below 4).`);
+        return out;
+      }
+      const baranRaise = aggr && aggr.name === "Baran";
+      if (evanShove) out.why.push("Evan shoves weak aces like A2 and A3. Any pair or a better ace is ahead of a lot of his range.");
+      else if (baranRaise) out.why.push("Baran is the one player who raises without a monster. His range is wider than anyone else's here.");
+      else if (raiser === "Emils") out.why.push("Emils almost never raises. When he does, he has a genuinely good hand.");
+      else out.why.push(`${raiser} only raises with a really strong hand. Expect big pairs or big aces.`);
+      if (c >= 14) out.head = `Re-raise or call: ${lbl} is a premium hand.`;
+      else if (c >= 10 || (evanShove && c >= 7) || (baranRaise && c >= 8)) out.head = `Call: ${lbl} does well enough against ${raiser}'s range.`;
+      else out.head = `Fold: ${lbl} is behind ${raiser}'s range.`;
+    } else if (c >= 10) {
+      const to = nearestStep(BB * 3 + BB * limpers.length + (limpers.some(q => q.name === "Emils") ? BB : 0));
+      out.head = `Raise to ${short(to)} with ${lbl}.`;
+      if (limpers.some(q => q.name === "Emils")) out.why.push("Emils limped and calls any raise, so size up: he'll pay you off with worse.");
+      if (limpers.some(q => q.name === "Jesal")) out.why.push("Jesal limped. He hates raises and usually folds, which leaves you fewer opponents.");
+      if (limpers.some(q => q.name === "Saul")) out.why.push("Saul may call to chase with suited or connected hands. That's fine: you're ahead.");
+      if (!limpers.length) out.why.push("No one has limped yet. A raise here looks very strong at this table, so expect folds from everyone but Emils.");
+    } else if (c >= 5) {
+      out.head = toCall === 0 ? `Check: see a free flop with ${lbl}.` : `Limp: ${lbl} is a cheap speculative hand in a limped pot.`;
+      out.why.push(limpers.length >= 2 ? `${limpers.map(q => q.name).join(", ")} have limped, so the pot will be multi-way. That suits hands that make straights, flushes or sets.` : "Pots here are cheap and multi-way, which suits hands that make straights, flushes or sets.");
+      if (G.seats.some(q => q.name === "Evan" && inHand(q) && !q.acted)) out.why.push("Evan is still to act and sometimes shoves a weak ace. If he does, this hand is a fold.");
+    } else {
+      out.head = toCall === 0 ? `Check: take the free flop with ${lbl}.` : `Fold: ${lbl} is too weak, even for 20p.`;
+      if (toCall > 0) out.why.push("Weak hands make second-best pairs, and Saul and Emils will happily call you down when you're behind.");
+    }
+    out.why.push(...noteHints(names));
+    out.why.push(`Hand strength score: ${c} (premium 12+, trash below 4).`);
+    return out;
+  }
+  const eq = equity(h.hole, G.board, Math.min(k, 5), 1500);
+  out.eq = eq;
+  const made = describe(bestScore([...h.hole, ...G.board]));
+  const wet = wetBoard(G.board);
+  out.why.push(`You have: ${made}.${wet ? " The board has draws on it." : ""}`);
+  const callers = opps.filter(q => q !== aggr && /^Call/.test(q.lastAct)).map(q => q.name);
+  const sticky = opps.filter(q => PROFILES[q.name] && PROFILES[q.name].cheapCall);
+  const invested = sticky.filter(q => q.committed >= 100).map(q => q.name);
+  const cheapLine = sticky.length ? `${sticky.map(q => q.name).join(", ")} won't fold to a really small bet${invested.length ? `, and ${invested.join(" and ")} ${invested.length > 1 ? "have" : "has"} already put a lot in, so won't give up cheaply` : ""}. A bluff has to be a proper size to work.` : null;
+  if (toCall > 0) {
+    const need = toCall / (pot + toCall); out.need = need;
+    let adj = eq;
+    if (aggr && !aggr.hero) {
+      const frac = toCall / Math.max(1, pot - toCall);
+      const rd = readBet(aggr.name, frac, hu, G.street, G.board);
+      adj = Math.min(0.95, eq * rd.m);
+      out.why.push(rd.t);
+    }
+    callers.forEach(n => CALLER[n] && out.why.push(CALLER[n]));
+    if (adj >= 0.62 && h.stack > toCall) out.head = `Raise for value: you're well ahead of what ${aggr ? aggr.name : "they"} bet${aggr ? "s" : ""} with here.`;
+    else if (adj >= need + 0.05) out.head = `Call: you need ${pct(need)} and have roughly ${pct(adj)} against ${aggr ? aggr.name + "'s" : "their"} range.`;
+    else if (adj >= need - 0.04) out.head = aggr && aggr.name === "Baran" ? "Close spot, but it's Baran: lean towards calling." : `Close spot. Folding is fine against ${aggr ? aggr.name : "a player"} who rarely bluffs.`;
+    else out.head = `Fold: you need ${pct(need)} and only have about ${pct(adj)} against ${aggr ? aggr.name + "'s" : "their"} range.`;
+  } else {
+    const r = eq * (k + 1);
+    if (r >= 1.5) {
+      let size = "½–⅔ pot";
+      if (has("Emils")) size = "¾ pot to pot";
+      else if (has("Saul") && wet) size = "about ¾ pot";
+      else if (names.every(n => ["Jesal", "Vadim"].includes(n))) size = "about ½ pot";
+      out.head = `Bet ${size} for value.`;
+      if (has("Emils")) out.why.push("Emils calls with almost anything, so bet bigger and keep betting every street.");
+      if (has("Saul") && wet) out.why.push("Saul chases draws even when the price is bad. Charge him a lot to see the next card.");
+      if (has("Baran") && hu) out.why.push("Against Baran alone, checking sometimes is fine too: he'll bluff into you.");
+      if (names.every(n => ["Jesal", "Vadim"].includes(n))) out.why.push(`${names.join(" and ")} fold${hu ? "s" : ""} when beaten, so a smaller bet gets called by more of their hands.`);
+    } else if (r >= 1.0 && has("Emils")) {
+      out.head = "Small value bet (about ⅓ pot).";
+      out.why.push("Your hand is medium strength, but Emils calls with worse. A small bet gets paid by him.");
+    } else if (hu && ["Jesal", "Evan", "Vadim"].includes(names[0]) && G.street !== "river") {
+      out.head = "A small bet (⅓–½ pot) often takes it.";
+      out.why.push(`${names[0]} gives up when he misses and rarely bluffs back.`);
+    } else if (hu && names[0] === "Saul") {
+      out.head = wet ? "Check. Don't bluff Saul on a board with draws." : "A small bet (⅓ pot) can take it, but give up if he calls.";
+      out.why.push(wet ? "Saul is sticky when he has a draw, and he'll call you down." : "Saul checks when weak and folds rubbish. If he calls, he's probably got something.");
+    } else if (hu && names[0] === "Baran") {
+      out.head = "Check. If you have something, let Baran bluff into you.";
+    } else if (hu && names[0] === "Emils") {
+      out.head = "Check. Never bluff Emils.";
+      out.why.push("He calls to the river with nothing, so bluffs don't work. Bet only when you have it.");
+    } else {
+      out.head = "Check. Your hand isn't strong enough to bet into this many players.";
+      if (has("Emils")) out.why.push("Emils is in, so a bluff won't work: he calls with anything.");
+    }
+    callers.forEach(n => CALLER[n] && out.why.push(CALLER[n]));
+    if (cheapLine) out.why.push(cheapLine);
+  }
+  out.why.push(...noteHints(names));
+  return out;
+}
+const pct = x => Math.round(x * 100) + "%";
+/* Generic coach for anyone who isn't Josh: hand strength, pot odds and equity only, no reads on named players */
+function genericAdvice() {
+  const h = G.seats[ME], toCall = G.currentBet - h.bet, pot = potTotal();
+  const k = G.seats.filter(q => !q.hero && inHand(q)).length;
+  const out = { head: "", why: [], eq: null, need: null };
+  if (G.street === "preflop") {
+    const c = chen(h.hole), lbl = handLabel(h.hole);
+    if (G.currentBet > BB && !(G.currentBet <= 50 && c < 14)) {
+      out.head = c >= 14 ? `Re-raise or call: ${lbl} is a premium hand.` : c >= 10 ? `Call: ${lbl} is strong enough to continue.` : `Fold: ${lbl} is behind a typical raising hand.`;
+      out.why.push("Pre-flop raises are rare at this table and usually mean a strong hand.");
+    } else if (G.currentBet > BB) {
+      out.head = c >= 10 ? `Raise to £1.50: ${lbl} is well ahead of a small raise.` : c >= 5 ? `Call: ${lbl} is worth ${short(toCall)} more in a multi-way pot.` : `Fold: ${lbl} is too weak, even for ${short(toCall)}.`;
+    } else if (c >= 10) {
+      out.head = `Raise with ${lbl} (about £1 to £1.50).`;
+      out.why.push("Strong hands play best against fewer opponents, and a raise makes the limpers pay to see the flop.");
+    } else if (c >= 5) {
+      out.head = toCall === 0 ? `Check: see a free flop with ${lbl}.` : `Limp: ${lbl} is a fine cheap hand when lots of people see the flop.`;
+    } else {
+      out.head = toCall === 0 ? `Check: take the free flop with ${lbl}.` : `Fold: ${lbl} is too weak, even for 20p.`;
+      if (toCall > 0) out.why.push("Weak hands make second-best pairs, which cost money later in the hand.");
+    }
+    out.why.push(`Hand strength score: ${c} (premium 12+, trash below 4).`);
+    out.why.push(...noteHints(G.seats.filter(q => !q.hero && inHand(q)).map(q => q.name)));
+    return out;
+  }
+  const eq = equity(h.hole, G.board, Math.min(k, 5), 1500); out.eq = eq;
+  out.why.push(`You have: ${describe(bestScore([...h.hole, ...G.board]))}.${wetBoard(G.board) ? " The board has draws on it." : ""}`);
+  if (toCall > 0) {
+    const need = toCall / (pot + toCall); out.need = need;
+    const adj = Math.min(0.95, eq * (toCall >= pot * 0.75 ? 0.75 : 0.85));
+    out.why.push("Bets at this table lean towards real hands, so your equity is shaded down from the random-hands figure.");
+    if (adj >= 0.62 && h.stack > toCall) out.head = "Raise for value: you're well ahead.";
+    else if (adj >= need + 0.05) out.head = `Call: you need ${pct(need)} and have roughly ${pct(adj)}.`;
+    else if (adj >= need - 0.04) out.head = "Close spot. Folding is fine against players who rarely bluff.";
+    else out.head = `Fold: you need ${pct(need)} and only have about ${pct(adj)}.`;
+  } else {
+    const r = eq * (k + 1);
+    if (r >= 1.5) out.head = "Bet ½–¾ pot for value.";
+    else if (r >= 1.1) out.head = "Small value bet (about ⅓ pot), or check.";
+    else if (k === 1 && G.street !== "river") out.head = "Check, or a small stab (⅓ pot) if you think they missed.";
+    else out.head = "Check. Your hand isn't strong enough to bet into this many players.";
+    out.why.push("Most players here call small bets and only bluff rarely, so bet your good hands and check your weak ones.");
+  }
+  out.why.push(...noteHints(G.seats.filter(q => !q.hero && inHand(q)).map(q => q.name)));
+  return out;
+}
+
+function recordHeroDecision(type, amount) {
+  const h = G.seats[ME], toCall = G.currentBet - h.bet, pot = potTotal();
+  const opps = G.seats.filter(q => !q.hero && inHand(q));
+  const k = opps.length;
+  const d = { street: G.street, type, amount, toCall, pot, k, names: opps.map(q => q.name), aggr: G.lastAggr >= 0 ? G.seats[G.lastAggr].name : null, board: G.board.slice(), cb: G.currentBet };
+  if (type === "raise" && G.street !== "preflop") d.sticky = opps.filter(q => wontFold(q.name, Math.min(amount, h.bet + h.stack) - q.bet, q.committed, G.street)).map(q => q.name);
+  if (G.street === "preflop") { d.chen = chen(h.hole); d.raiseAllIn = G.lastAggr >= 0 && G.seats[G.lastAggr].allIn; }
+  else d.eq = equity(h.hole, G.board, Math.min(k, 5), 900);
+  d.advice = heroAdvice().head;
+  d.full = FULL();
+  G.heroDec.push(d);
+}
+function judge(d) {
+  const j = judgeFull(d);
+  if (d.full !== false) return j;
+  // generic wording for everyone but Josh: keep the mark and the numbers, drop player-specific reads
+  const notes = { good: "Good decision.", warn: "Debatable: there was probably a better option.", bad: "Costly: the numbers were against this." };
+  return { mark: j.mark, text: j.text.replace(/\. [^.(]*?(Emils|Saul|Baran|Jesal|Evan|Vadim|Josh)[^]*$/, ". " + notes[j.mark]) };
+}
+function judgeFull(d) {
+  const verb = d.type === "fold" ? "folded" : d.type === "check" ? "checked" : d.type === "call" ? `called ${short(d.toCall)}` : (d.toCall === 0 ? `bet ${short(d.amount)}` : `raised to ${short(d.amount)}`);
+  const where = d.street === "preflop" ? "Pre-flop" : d.street[0].toUpperCase() + d.street.slice(1);
+  const names = d.names || [];
+  let mark = "good", note = "";
+  if (d.street === "preflop") {
+    const c = d.chen;
+    if (d.type === "fold") { mark = c >= 9 && d.toCall <= BB ? "warn" : "good"; note = c >= 9 && d.toCall <= BB ? "Strong enough to play, even to raise and isolate the limpers." : "Sensible fold."; }
+    else if (d.type === "call") {
+      if (d.toCall > BB) {
+        const wide = d.aggr === "Baran" || (d.aggr === "Evan" && d.raiseAllIn);
+        const small = d.cb <= 50;
+        const ok = small ? 5 : wide ? 7 : 10;
+        mark = c >= ok ? "good" : c >= ok - 2 ? "warn" : "bad";
+        note = mark === "good" ? (small ? `Fine: ${short(d.toCall)} more to see a flop is cheap.` : `Fine call against ${d.aggr || "the raise"}.`) : small ? "Even a small raise isn't worth calling with a hand this weak." : wide ? `${d.aggr}'s range is wide, but this hand was still too weak.` : `${d.aggr || "They"} only raise${d.aggr ? "s" : ""} with a really strong hand, so calling with this loses money.`;
+      } else { mark = c >= 4 ? "good" : "warn"; note = c >= 10 ? `Strong hand. A raise would isolate the limpers${names.includes("Emils") ? " and get Emils to pay you off" : ""}.` : c >= 4 ? "Fine cheap limp." : "Limping trash hands leaks money over time."; if (c >= 10) mark = "warn"; }
+    }
+    else if (d.type === "raise") { mark = c >= 9 ? "good" : "warn"; note = c >= 9 ? (names.includes("Emils") ? "Good raise. Emils will call with worse." : "Good raise. It thins the field.") : "Raising this hand is a bluff, and Emils and Saul don't fold enough for that."; }
+    else note = "Free flop.";
+    return { mark, text: `${where}: you ${verb}. ${note}` };
+  }
+  const eqTxt = `equity about ${pct(d.eq)}`;
+  if (d.toCall > 0) {
+    const need = d.toCall / (d.pot + d.toCall);
+    const frac = d.toCall / Math.max(1, d.pot - d.toCall);
+    const rd = d.aggr ? readBet(d.aggr, frac, d.k === 1, d.street, d.board) : { m: 1, t: "" };
+    const adj = Math.min(0.95, d.eq * rd.m);
+    const who = d.aggr || "they";
+    if (d.type === "fold") { mark = adj >= need + 0.1 ? "bad" : adj >= need ? "warn" : "good"; note = mark === "good" ? `Good fold. ${rd.t}` : d.aggr === "Baran" ? "Baran bluffs a lot here. This was worth a call." : "You were getting a good enough price to continue."; }
+    else if (d.type === "call") { mark = adj >= need - 0.03 ? "good" : adj >= need - 0.1 ? "warn" : "bad"; note = mark === "good" ? "The price justified the call." : `${rd.t} That made this an expensive call.`; }
+    else { mark = adj >= 0.55 ? "good" : (d.aggr === "Baran" ? "warn" : "bad"); note = mark === "good" ? "Strong raise for value." : `Raising into ${who} here mostly gets called by better hands.`; }
+    return { mark, text: `${where}: you ${verb}, needing ${pct(need)} (${eqTxt}, about ${pct(adj)} against ${who}'s range). ${note}` };
+  }
+  const r = d.eq * (d.k + 1);
+  const emils = names.includes("Emils"), wet = wetBoard(d.board);
+  if (d.type === "check") {
+    mark = r >= 1.8 || (emils && r >= 1.2) ? "warn" : "good";
+    note = mark === "warn" ? (emils ? "Emils was in and calls with worse. This was a spot to bet." : names.includes("Saul") && wet ? "You let Saul see a free card on a board full of draws. Bet to charge him." : "You were strong enough to bet for value.") : "Fine check.";
+  } else if (r < 1.2 && (d.sticky || []).length) {
+    mark = "bad"; note = `${d.sticky.join(" and ")} ${d.sticky.length > 1 ? "weren't" : "wasn't"} going to fold to that: the bet was too small, or they'd already put a lot in. A bluff needed to be bigger.`;
+  } else {
+    mark = r >= 1.2 ? "good" : d.k === 1 && !emils && !(names[0] === "Saul" && wet) ? "warn" : "bad";
+    note = r >= 1.2 ? (emils ? "Good value bet. Emils pays these off." : "Good value bet.") : emils ? "Bluffing Emils doesn't work: he calls with anything." : d.k === 1 && names[0] === "Baran" ? "A stab at Baran. He often raises or floats as a bluff, so be careful." : d.k === 1 && names[0] === "Saul" && wet ? "Bluffing Saul on a board with draws rarely works: he chases." : d.k === 1 ? `A stab at ${names[0]}. Fine: he gives up when he misses.` : "Betting a weak hand into several players rarely works here.";
+  }
+  return { mark, text: `${where}: you ${verb} (${eqTxt} against ${names.join(", ") || d.k + " players"}). ${note}` };
+}
+</script>
+
+<script>
+/* ===== UI ===== */
+const $ = id => document.getElementById(id);
+const TURN_MS = 30000, AUTO_DEAL_MS = 8000;
+const params = new URLSearchParams(location.search);
+
+/* ===== Who's playing on this device ===== */
+const ident = {
+  get() { try { return localStorage.getItem("flat8poker.me"); } catch { return null; } },
+  set(n) { try { localStorage.setItem("flat8poker.me", n); } catch {} },
+};
+let meName = null;
+function setMe(name) { meName = name; ME = SEAT_NAMES.indexOf(name); ident.set(name); }
+{ const saved = ident.get(); if (SEAT_NAMES.includes(saved)) setMe(saved); }
+
+const storeKey = () => (!meName || meName === "Josh") ? "flat8poker.v1" : "flat8poker.v1." + meName;
+const store = {
+  get() { try { return JSON.parse(localStorage.getItem(storeKey()) || "null"); } catch { return null; } },
+  set(v) { try { localStorage.setItem(storeKey(), JSON.stringify(v)); } catch {} },
+};
+const opts = { tips: false, fast: false, showAll: false, audio: false, autoDeal: true };
+function saveSession() {
+  const keep = { opts, notes: notesCache || store.get()?.notes || [] };
+  if (G.mode === "solo") Object.assign(keep, { seats: G.seats.map(p => ({ stack: p.stack, buyins: p.buyins, out: p.out })), button: G.button, handNo: G.handNo });
+  else { const old = store.get(); if (old) Object.assign(keep, { seats: old.seats, button: old.button, handNo: old.handNo }); }
+  store.set(keep);
+}
+function loadSession() {
+  const s = store.get(); if (!s) return;
+  if (G.mode === "solo") {
+    s.seats?.forEach((q, i) => { if (G.seats[i]) Object.assign(G.seats[i], { stack: q.stack, buyins: q.buyins, out: q.out }); });
+    if (typeof s.button === "number") G.button = s.button;
+    if (typeof s.handNo === "number") G.handNo = s.handNo;
+  }
+  if (s.opts) Object.assign(opts, s.opts);
+  notesCache = s.notes || [];
+}
+function resetG(mode) {
+  clearTimeout(G.timer); clearTimeout(G.turnTimer); clearTimeout(G.autoTimer); stopSpeech();
+  G.mode = mode; G.seats = freshSeats();
+  Object.assign(G, { handNo: 0, street: "idle", board: [], deck: [], result: null, log: [], heroDec: [], toAct: -1, waitingHero: false, waitingRemote: -1, deadline: 0, nextDealAt: 0, commentary: [], peek: new Set(), button: 6, currentBet: 0, acts: [], actN: 0, pending: null, sayEv: null });
+  skipping = false; tipShown = null; claudeText = ""; claudeState = "idle";
+}
+
+/* ===== Table drawing ===== */
+function seatPos(i) {
+  const v = (i - ME + 7) % 7;  // you always sit at the bottom
+  const narrow = window.matchMedia("(max-width: 760px)").matches;
+  const a = (90 + v * 360 / 7) * Math.PI / 180;
+  const rx = narrow ? 40 : 44, ry = narrow ? 42 : 41;
+  return { x: 50 + rx * Math.cos(a), y: 50 + ry * Math.sin(a) };
+}
+function cardEl(c, cls = "") {
+  const d = document.createElement("div");
+  if (c === null) { d.className = "card back " + cls; return d; }
+  if (c === undefined) { d.className = "card slot " + cls; return d; }
+  const s = c & 3; d.className = "card " + cls + (s === 1 || s === 2 ? " red" : "");
+  const r = document.createElement("span"); r.textContent = RANKS[c >> 2] === "T" ? "10" : RANKS[c >> 2];
+  const su = document.createElement("span"); su.className = "s"; su.textContent = SUIT_SYM[SUITS[s]];
+  d.append(r, su); return d;
+}
+/* Cards only animate when they first appear in a spot, not on every redraw */
+const shownCards = new Map();
+function keyed(key, c, cls) {
+  const v = c === null ? "back" : c === undefined ? "slot" : c;
+  const el = cardEl(c, cls);
+  if (shownCards.get(key) === v) el.classList.add("noanim");
+  shownCards.set(key, v); return el;
+}
+const secsLeft = dl => Math.max(0, Math.ceil((dl - serverNow()) / 1000));
+function renderTable() {
+  const t = $("table");
+  t.querySelectorAll(".seat,.dealer,.betchip").forEach(e => e.remove());
+  const solo = G.mode === "solo";
+  G.seats.forEach((p, i) => {
+    const pos = seatPos(i);
+    const el = document.createElement("div");
+    const peeked = solo && G.peek && G.peek.has(i);
+    const reveal = p.hero || p.shown || (solo && (opts.showAll || peeked));
+    el.className = "seat" + (G.toAct === i && G.street !== "idle" && !G.result ? " turn" : "") + (p.out ? " out" : p.folded && G.street !== "idle" ? " folded" : "") + (G.result && G.result.winners.some(w => w.name === p.name) ? " winner" : "") + (!solo && p.human ? " human" : "");
+    el.style.left = pos.x + "%"; el.style.top = pos.y + "%";
+    // Tap a seat to see just that player's cards (solo only)
+    if (solo && !p.hero && p.hole.length && !p.out) {
+      el.classList.add("peekable"); el.title = peeked ? `Hide ${p.name}'s cards` : `Tap to see ${p.name}'s cards`;
+      el.onclick = () => { if (G.peek.has(i)) G.peek.delete(i); else G.peek.add(i); renderTable(); };
+    }
+    const hole = document.createElement("div"); hole.className = "hole";
+    if (p.hole.length && !p.out && (!p.folded || reveal)) p.hole.forEach((c, k) => hole.append(keyed(`s${i}-${k}`, reveal ? c : null, "sm")));
+    let madeEl = null;
+    if (!p.hero && !p.out && p.hole.length && reveal && p.hole[0] !== null) {
+      madeEl = document.createElement("div"); madeEl.className = "madehand";
+      madeEl.textContent = G.board.length >= 3 ? shortDesc(bestScore([...p.hole, ...G.board])) : (cardRank(p.hole[0]) === cardRank(p.hole[1]) ? `Pair of ${RANKS[cardRank(p.hole[0])] === "T" ? "10" : RANKS[cardRank(p.hole[0])]}s` : handLabel(p.hole));
+      if (p.folded) madeEl.textContent += " (folded)";
+    }
+    const plate = document.createElement("div"); plate.className = "plate";
+    const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = p.hero ? "You" : p.name;
+    const st = document.createElement("div"); st.className = "stk"; st.textContent = p.out ? "out" : money(p.stack);
+    const ac = document.createElement("div"); ac.className = "act" + (p.thinking ? " thinking" : "");
+    ac.textContent = p.thinking ? "Thinking…" : p.lastAct;
+    if (G.deadline && G.toAct === i && !G.result && G.street !== "idle") { ac.className = "act clock"; ac.dataset.deadline = G.deadline; ac.dataset.prefix = "⏱ "; ac.textContent = "⏱ " + secsLeft(G.deadline) + "s"; }
+    plate.append(nm, st, ac);
+    if (G.handNo > 0 && i === G.button) { const dl = document.createElement("div"); dl.className = "dealer"; dl.textContent = "D"; dl.title = "Dealer"; plate.append(dl); }
+    if (pos.y < 50) el.append(...[plate, hole, madeEl].filter(Boolean)); else el.append(...[madeEl, hole, plate].filter(Boolean));
+    t.append(el);
+    if (p.bet > 0) {
+      const b = document.createElement("div"); b.className = "betchip"; b.textContent = short(p.bet);
+      b.style.left = (50 + (pos.x - 50) * 0.55) + "%"; b.style.top = (50 + (pos.y - 50) * 0.55) + "%"; t.append(b);
+    }
+  });
+  const board = $("board"); board.replaceChildren();
+  for (let k = 0; k < 5; k++) board.append(keyed(`b${k}`, G.board[k]));
+  $("pot").textContent = "Pot " + money(potTotal() || (G.result ? G.result.winners.reduce((s, w) => s + w.amount, 0) : 0));
+  $("street").textContent = G.street === "idle" ? "Waiting to deal" : G.result ? "Hand over" : { preflop: "Pre-flop", flop: "Flop", turn: "Turn", river: "River" }[G.street];
+}
+
+function renderStats() {
+  const h = G.seats[ME];
+  const netNow = h.stack - h.buyins * BUYIN + (G.result ? 0 : h.committed);
+  const s = $("stats"); s.replaceChildren();
+  const add = (label, val, cls) => { const d = document.createElement("span"); d.className = "stat"; d.textContent = label; const b = document.createElement("b"); b.textContent = val; if (cls) b.className = cls; d.append(b); s.append(d); };
+  add("Hand", String(G.handNo));
+  add("Your stack", money(h.stack));
+  add("Session", (netNow > 0 ? "+" : "") + money(netNow), netNow > 0 ? "pos" : netNow < 0 ? "neg" : "");
+  add("Buy-ins", String(h.buyins));
+}
+
+function renderLog() { const l = $("log"); l.textContent = G.log.join("\n"); l.scrollTop = l.scrollHeight; }
+
+function renderControls() {
+  const c = $("controls"); c.replaceChildren();
+  const h = G.seats[ME], solo = G.mode === "solo";
+  const yh = document.createElement("div"); yh.className = "yourhand";
+  const cards = document.createElement("div"); cards.className = "cards";
+  const haveCards = h.hole.length && h.hole[0] !== null;
+  if (haveCards) h.hole.forEach((x, k) => cards.append(keyed(`h${k}`, x, "lg"))); else { cards.append(keyed("h0", undefined, "lg"), keyed("h1", undefined, "lg")); }
+  const info = document.createElement("div"); info.className = "info";
+  const made = document.createElement("div"); made.className = "made";
+  const sub = document.createElement("div"); sub.className = "sub";
+  if (haveCards) {
+    made.textContent = G.board.length ? describe(bestScore([...h.hole, ...G.board])) : handLabel(h.hole);
+    sub.textContent = h.folded && !G.result ? "You folded. Watching the rest of the hand…" : G.waitingHero ? `Your turn · pot ${money(potTotal())}` : G.result ? "Hand over" : "Waiting for the others…";
+    if (G.waitingHero && G.deadline) { const ck = document.createElement("span"); ck.className = "clocktxt"; ck.dataset.deadline = G.deadline; ck.dataset.prefix = " · "; ck.textContent = " · " + secsLeft(G.deadline) + "s"; sub.append(ck); }
+  } else { made.textContent = "No hand yet"; sub.textContent = G.mode === "client" ? (G.street !== "idle" && !G.result ? "You'll be dealt in next hand." : "Waiting for the host to deal.") : "Deal to start."; }
+  info.append(made, sub); yh.append(cards, info); c.append(yh);
+
+  const row = document.createElement("div"); row.className = "btnrow";
+  if (G.handNo > 0 && solo) {
+    const eye = btn(opts.showAll ? "Hide their cards" : "Show their cards", "small", () => { opts.showAll = !opts.showAll; $("optShow").checked = opts.showAll; saveSession(); renderTable(); renderControls(); });
+    eye.setAttribute("aria-pressed", opts.showAll ? "true" : "false");
+    yh.append(eye);
+  }
+  if (G.waitingHero) {
+    const toCall = G.currentBet - h.bet;
+    const fold = btn("Fold", "fold", () => heroAct("fold"));
+    const cc = toCall === 0 ? btn("Check", "", () => heroAct("check")) : btn(toCall >= h.stack ? `Call all-in ${short(h.stack)}` : `Call ${short(toCall)}`, "", () => heroAct("call"));
+    row.append(fold, cc);
+    const maxTo = h.bet + h.stack;
+    if (maxTo > G.currentBet) {
+      const box = document.createElement("div"); box.className = "raise";
+      const choices = betOptions(h);
+      const range = document.createElement("input"); range.type = "range"; range.id = "raiseRange"; range.min = 0; range.max = choices.length - 1; range.step = 1; range.setAttribute("aria-label", "Raise amount");
+      const pot = potTotal();
+      const amt = document.createElement("span"); amt.className = "amt";
+      let cur = choices[0];
+      const go = btn("", "primary", () => heroAct("raise", cur));
+      const show = () => { amt.textContent = short(cur); go.textContent = (cur >= maxTo ? "All-in " : G.currentBet === 0 ? "Bet " : "Raise to ") + short(cur); };
+      const setTo = v => { cur = snapTo(v, h); range.value = choices.indexOf(cur); show(); };
+      range.oninput = () => { cur = choices[+range.value]; show(); };
+      const preset = (label, v) => btn(label, "small", () => setTo(v));
+      const callPot = pot + toCall;
+      const presets = G.street === "preflop"
+        ? [50, 100, 150, 200].filter(v => v > G.currentBet && v < maxTo).map(v => preset(short(v), v)).concat([preset("All-in", maxTo)])
+        : [preset("½ pot", G.currentBet + callPot * 0.5), preset("¾ pot", G.currentBet + callPot * 0.75), preset("Pot", G.currentBet + callPot), preset("All-in", maxTo)];
+      box.append(range, amt, ...presets, go);
+      setTo(G.street === "preflop" ? (G.currentBet === BB ? 100 : G.currentBet * 3) : G.currentBet + callPot * 0.6);
+      row.append(box);
+    }
+    if (!opts.tips) row.append(btn("Hint", "small", () => showTip(true)));
+  } else if (G.street === "idle" || G.result) {
+    if (G.mode === "client") {
+      const w = document.createElement("span"); w.className = "waiting";
+      if (G.nextDealAt) { w.textContent = "Next hand in "; const ck = document.createElement("span"); ck.className = "clocktxt"; ck.dataset.deadline = G.nextDealAt; ck.dataset.prefix = ""; ck.textContent = secsLeft(G.nextDealAt) + "s"; w.append(ck); }
+      else w.textContent = `Waiting for ${LIVE.hostName || "the host"} to deal…`;
+      row.append(w);
+    } else {
+      if (solo && h.stack < 50) row.append(btn("Buy in again for £10", "primary", () => { h.stack += BUYIN; h.buyins++; saveSession(); renderAll(); }));
+      if (h.stack > 0 || !solo) row.append(btn(G.handNo ? "Deal next hand" : "Deal first hand", solo && h.stack < 50 ? "" : "primary", deal));
+      if (G.mode === "host" && G.nextDealAt) { const w = document.createElement("span"); w.className = "waiting"; w.textContent = "Auto-deal in "; const ck = document.createElement("span"); ck.className = "clocktxt"; ck.dataset.deadline = G.nextDealAt; ck.dataset.prefix = ""; ck.textContent = secsLeft(G.nextDealAt) + "s"; w.append(ck); row.append(w); }
+    }
+  } else {
+    const w = document.createElement("span"); w.className = "waiting";
+    const who = G.seats[G.toAct];
+    w.textContent = h.folded ? "Playing out the hand…" : who && !who.hero ? `Waiting for ${who.name}…` : "Waiting for the others…";
+    row.append(w);
+    if (h.folded && solo) row.append(btn("Skip to the end", "small", () => { skipping = true; if (speechOK) speechSynthesis.cancel(); if (G.pending) { clearTimeout(G.timer); G.pending(); } }));
+  }
+  c.append(row);
+}
+function btn(text, cls, fn) { const b = document.createElement("button"); b.textContent = text; if (cls) b.className = cls; b.onclick = fn; return b; }
+
+let tipShown = null;
+function showTip(force) {
+  if (!G.waitingHero) return;
+  if (!opts.tips && !force) { renderCoach(); return; }
+  tipShown = heroAdvice(); renderCoach();
+}
+
+let claudeCtl = null, claudeText = "", claudeState = "idle";
+function renderCoach() {
+  const ae = document.activeElement, keep = ae && ae.id === "realNote" ? [ae.selectionStart, ae.selectionEnd] : null;
+  renderCoachInner();
+  if (keep) { const ta = $("realNote"); if (ta) { ta.focus(); ta.setSelectionRange(keep[0], keep[1]); } }
+}
+const youOr = n => n === meName ? "You" : n;
+function renderCoachInner() {
+  const body = $("coachBody"); body.replaceChildren();
+  $("coachTitle").textContent = G.result ? `Round summary · hand ${G.handNo}` : "Coach";
+  if (G.waitingHero && tipShown) {
+    const t = document.createElement("div"); t.className = "tip";
+    const hd = document.createElement("div"); hd.className = "head"; hd.textContent = tipShown.head; t.append(hd);
+    for (const w of tipShown.why) { const p = document.createElement("div"); p.textContent = w; t.append(p); }
+    if (tipShown.eq !== null) { const n = document.createElement("div"); n.className = "nums"; n.textContent = `Equity vs ${G.seats.filter(q => !q.hero && inHand(q)).length} random hands: ${pct(tipShown.eq)}` + (tipShown.need !== null ? ` · price to call: ${pct(tipShown.need)}` : ""); t.append(n); }
+    body.append(t);
+  } else if (!G.result) {
+    const p = document.createElement("p"); p.className = "note";
+    p.textContent = G.handNo === 0 ? "Deal a hand to start. After each hand you'll get a quick review of your decisions." : opts.tips ? (FULL() ? "Coach is on: advice on your turn, plus what the others' bets and raises probably mean." : "Coach is on: advice on your turn.") : "Press Hint on your turn for advice, or turn the coach on. A review comes after each hand.";
+    body.append(p);
+  }
+  if (opts.tips && FULL() && !G.result && G.commentary && G.commentary.length) {
+    const cm = document.createElement("div"); cm.className = "commentary";
+    const hd = document.createElement("div"); hd.className = "head"; hd.textContent = "At the table"; cm.append(hd);
+    for (const line of G.commentary.slice(-5)) { const p = document.createElement("div"); p.textContent = line; cm.append(p); }
+    body.append(cm);
+  }
+  if (G.result) {
+    const sum = document.createElement("div"); sum.className = "summary";
+    const r = document.createElement("div"); r.className = "result";
+    r.textContent = G.result.winners.map(w => `${youOr(w.name)} won ${money(w.amount)}${w.hand ? " with " + w.hand.replace(/^./, c => c.toLowerCase()) : ""}`).join(" · ");
+    sum.append(r);
+    const how = document.createElement("div"); how.className = "how";
+    if (G.result.showdown) {
+      const winnersN = G.result.winners.map(w => w.name);
+      const others = G.result.hands.filter(h => !winnersN.includes(h.name)).map(h => `${h.name === meName ? "you" : h.name} (${h.desc.replace(/^./, c => c.toLowerCase())})`);
+      how.textContent = `Showdown on the river${others.length ? ", beating " + others.join(", ") : ""}.`;
+      if (G.board.length < 5 || G.seats.some(q => inHand(q) && q.allIn)) how.textContent = how.textContent.replace("Showdown on the river", "Showdown after an all-in");
+    } else {
+      how.textContent = `Everyone else folded ${G.street === "preflop" ? "before the flop" : "on the " + G.street}.`;
+    }
+    sum.append(how);
+    (G.result.notes || []).forEach(n => { const s = document.createElement("div"); s.className = "note"; s.textContent = n; sum.append(s); });
+    const me = G.seats[ME];
+    if (typeof G.heroStart === "number" && me.hole.length) {
+      const net = me.stack - G.heroStart;
+      const y = document.createElement("div"); y.className = "net " + (net > 0 ? "good" : net < 0 ? "bad" : "");
+      y.textContent = `You: ${net > 0 ? "+" : net < 0 ? "−" : "±"}${money(Math.abs(net))} this hand · stack ${money(me.stack)}`;
+      sum.append(y);
+    }
+    body.append(sum);
+    if (G.heroDec.length) {
+      const hd = document.createElement("div"); hd.className = "subhead"; hd.textContent = "Your decisions"; body.append(hd);
+      const rv = document.createElement("div"); rv.className = "review";
+      for (const d of G.heroDec) {
+        const j = judge(d);
+        const row = document.createElement("div"); row.className = "row";
+        const m = document.createElement("span"); m.className = "m " + j.mark; m.textContent = j.mark === "good" ? "✓" : j.mark === "warn" ? "~" : "✗";
+        const tx = document.createElement("span"); tx.textContent = j.text;
+        row.append(m, tx); rv.append(row);
+      }
+      body.append(rv);
+      const n = document.createElement("p"); n.className = "note"; n.textContent = "Equity figures are estimates against random hands. Real ranges are stronger when these players bet."; body.append(n);
+    } else if (me.hole.length) {
+      const n = document.createElement("p"); n.className = "note"; n.textContent = "You didn't have to make a decision this hand."; body.append(n);
+    }
+    if (G.mode === "solo") {
+      const unseen = G.seats.filter(p => !p.hero && p.hole.length && !p.shown && !p.out);
+      const br = document.createElement("div"); br.className = "btnrow";
+      if (unseen.length) br.append(btn("Show everyone's cards", "small", () => { unseen.forEach(p => { p.shown = true; G.log.push(`(${p.name} had ${p.hole.map(cardStr).join(" ")})`); }); renderAll(); }));
+      body.append(br);
+    }
+    renderClaude(body);
+  }
+}
+
+function renderClaude(body) {
+  if (!sampleFn || G.mode !== "solo") return;
+  const wrap = document.createElement("div"); wrap.style.display = "grid"; wrap.style.gap = "8px";
+  const qrow = document.createElement("div"); qrow.className = "qrow";
+  const q = document.createElement("input"); q.id = "claudeQ"; q.placeholder = "Optional: ask something about this hand"; q.setAttribute("aria-label", "Question for Claude");
+  const ask = btn(claudeState === "busy" ? "Thinking…" : "Ask Claude to review this hand", "", () => askClaude(q.value));
+  ask.disabled = claudeState === "busy";
+  qrow.append(q, ask);
+  if (claudeState === "busy") qrow.append(btn("Stop", "small", () => claudeCtl?.abort()));
+  wrap.append(qrow);
+  if (claudeText) { const o = document.createElement("div"); o.className = "claude-out"; o.id = "claudeOut"; o.textContent = claudeText; wrap.append(o); }
+  body.append(wrap);
+}
+
+/* ===== Notes: what the real players would do ===== */
+let notesCache = null;
+const getNotes = () => notesCache || store.get()?.notes || [];
+function setNotes(n) { notesCache = n.slice(-100); saveSession(); renderNotes(); }
+function addNote(who, text) {
+  const n = getNotes().slice();
+  const rec = { who, note: text, hand: G.handNo, date: new Date().toISOString().slice(0, 10), log: G.handNo > 0 ? G.log.slice() : [] };
+  n.push(rec); setNotes(n);
+  dataPush("notes", { t: Date.now(), v: 2, author: meName, who, note: text, hand: G.handNo, mode: G.mode, log: rec.log.join("\n") });
+}
+function notesFor(filter) { return getNotes().filter(filter).map(n => `- ${n.who}: ${n.note}`).join("\n"); }
+function allNotesText() {
+  return getNotes().map(n => `=== ${n.who} · hand ${n.hand} (${n.date}) ===\nNote: ${n.note}${n.log.length ? "\nHand history:\n" + n.log.join("\n") : ""}`).join("\n\n");
+}
+function renderNotes() {
+  const list = $("notesList"); list.replaceChildren();
+  const n = getNotes();
+  if (!n.length) { const p = document.createElement("p"); p.className = "note"; p.textContent = "No notes yet."; list.append(p); return; }
+  n.slice().reverse().forEach(x => {
+    const row = document.createElement("div"); row.className = "noterow";
+    const b = document.createElement("b"); b.textContent = x.who + ": ";
+    const t = document.createElement("span"); t.textContent = x.note;
+    const m = document.createElement("span"); m.className = "note"; m.textContent = ` (hand ${x.hand})`;
+    const del = btn("✕", "small", () => setNotes(getNotes().filter(y => y !== x))); del.setAttribute("aria-label", "Delete note");
+    row.append(del, b, t, m); list.append(row);
+  });
+}
+function profilesText() { return Object.entries(PROFILES).filter(([n]) => n !== meName).map(([n, p]) => `${n}: ${p.blurb}`).join("\n"); }
+async function askClaude(question) {
+  if (!sampleFn || claudeState === "busy") return;
+  claudeCtl = new AbortController(); claudeState = "busy"; claudeText = "Thinking…"; renderCoach();
+  const allCards = G.seats.filter(p => p.hole.length && !p.out).map(p => `${p.name}: ${p.hole.map(cardStr).join(" ")}${p.folded ? " (folded)" : ""}`).join("\n");
+  const prompt = `You are a friendly, honest poker coach for ${meName}, who plays a weekly home game with flatmates in "flat 8". Game: No-Limit Texas Hold'em cash, £10 buy-in, 10p/20p blinds, 7 players. At this table almost everyone limps pre-flop and only raises with a really strong hand, and apart from Baran, bluffing is rare.
+
+Opponent profiles:
+${profilesText()}
+
+Here is a practice hand ${meName} just played against simulated versions of these players. The hand is over, so all hole cards are listed (${meName} could not see opponents' cards during the hand).
+
+Hand history:
+${G.log.join("\n")}
+
+All hole cards:
+${allCards}
+
+${notesFor(n => n.hand === G.handNo) ? `Corrections for this hand (how the real players would probably have played it):\n${notesFor(n => n.hand === G.handNo)}\n\n` : ""}${question ? `Question: ${question}\n\n` : ""}Review ${meName}'s decisions in this hand. Be specific: for each decision that mattered, say whether it was good and why, using pot odds, equity and what the opponent's profile says about their range. Point out the better line if there was one, and say whether the result was skill or luck. Keep it under 250 words, plain text with short paragraphs or simple dashes, in British English. Address ${meName} as "you".`;
+  try {
+    await sampleFn(prompt, { signal: claudeCtl.signal, cache: false, onText: ({ text }) => { claudeText = text; const o = $("claudeOut"); if (o) o.textContent = text; else renderCoach(); } });
+    claudeState = "idle";
+  } catch (e) {
+    claudeState = "idle";
+    const msg = { not_granted: "Claude reviews are switched off for this page.", sampling_disabled: "Claude isn't available on this account.", rate_limited: "Too many requests just now. Try again in a minute.", session_expired: "Please sign in to claude.ai again.", cancelled: "" }[e?.code];
+    if (e?.code === "not_granted" || e?.code === "sampling_disabled") sampleFn = null;
+    claudeText = (e?.text || "") + (msg === undefined ? "\n(Couldn't reach Claude. Try again.)" : msg ? "\n" + msg : "");
+  }
+  renderCoach();
+}
+
+function renderPlayers() {
+  const box = $("playersBox"); box.hidden = !FULL();
+  const el = $("playersInfo"); el.replaceChildren();
+  if (!FULL()) return;
+  for (const [n, p] of Object.entries(PROFILES)) { if (n === "Josh") continue; const d = document.createElement("div"); const b = document.createElement("b"); b.textContent = `${p.rank}. ${n}: `; d.append(b, document.createTextNode(p.blurb)); el.append(d); }
+}
+
+function renderAll() {
+  renderTable(); renderStats(); renderControls(); renderCoach(); renderLog(); renderBanner();
+  if (G.mode === "host") LIVE.publish();
+}
+
+/* ===== Flow ===== */
+let skipping = false;
+/* Thinking time: how long each player takes, by personality and how hard the decision is */
+const THINK = {
+  Josh:  { base: 1400, tricky: 2.0 },
+  Vadim: { base: 1300, tricky: 2.4 },  // quick on easy spots, takes his time on close ones
+  Saul:  { base: 1500, tricky: 2.0 },
+  Baran: { base: 1000, tricky: 1.4 },  // impulsive, acts fast
+  Jesal: { base: 1500, tricky: 1.8 },
+  Evan:  { base: 1700, tricky: 2.0 },
+  Emils: { base: 2300, tricky: 1.5 },  // slow to work out what others might have
+};
+function thinkMs(i, d, info) {
+  if (skipping || opts.fast) return 0;
+  const p = G.seats[i], t = THINK[p.name] || { base: 1400, tricky: 1.8 };
+  let ms = t.base;
+  if (G.street === "preflop") {
+    if (d.type === "fold" || d.type === "check") ms *= 0.45;
+    else if (d.type === "call" && !info.facingRaise) ms *= 0.6;
+    else ms *= 1.2;
+    if (info.facingRaise && d.type !== "raise") ms *= 1.4;
+    if (info.toCall >= info.stack * 0.5) ms *= 1.6;
+  } else {
+    ms *= { flop: 1, turn: 1.15, river: 1.3 }[G.street] || 1;
+    if (p.name === "Emils") ms *= 1 + 0.2 * (G.board.length - 3);
+    if (info.toCall > 0 && info.eq !== null && info.need !== null) {
+      const close = 1 - Math.min(1, Math.abs(info.eq - info.need) / 0.15);
+      ms *= 1 + close * (t.tricky - 1) * 1.5;
+    }
+    if (info.toCall > info.stack * 0.4) ms *= 1.4;
+    if (d.type === "raise") ms *= 1.15;
+    if (d.type === "check" && info.toCall === 0 && info.eq !== null && info.eq < 0.3) ms *= 0.6;
+  }
+  ms *= rand(0.7, 1.4);
+  return Math.min(Math.round(ms), 8000);
+}
+const delay = () => skipping ? 0 : opts.fast ? 250 : 750;
+function deal() {
+  if (G.mode === "client") return;
+  stopSpeech();
+  clearTimeout(G.timer); clearTimeout(G.autoTimer); G.nextDealAt = 0; G.pending = null; skipping = false; claudeText = ""; claudeState = "idle"; claudeCtl?.abort(); tipShown = null; G.commentary = [];
+  if (G.mode === "host") LIVE.syncSeats();
+  const r = startHand();
+  if (r === "hero-broke") { G.street = "idle"; renderAll(); return; }
+  if (r === "no-players") { G.log = ["Not enough players left with chips. Reset everyone to £10 to keep playing."]; G.street = "idle"; renderAll(); return; }
+  if (G.mode === "host") LIVE.sendHoles();
+  renderAll(); G.timer = setTimeout(step, delay());
+}
+function startClock(i) {
+  if (G.mode !== "host") return;
+  G.deadline = serverNow() + TURN_MS;
+  clearTimeout(G.turnTimer); G.turnTimer = setTimeout(() => timeoutAct(i), TURN_MS);
+}
+function step() {
+  const live = G.seats.filter(inHand);
+  if (live.length === 1) return finish();
+  if (roundComplete()) {
+    if (G.street === "river") return finish();
+    const runout = G.seats.filter(canAct).length <= 1;
+    dealStreet(); startStreet(); setSay(spokenStreet()); renderAll();
+    announce(() => { G.timer = setTimeout(step, runout ? (skipping ? 0 : 900) : delay()); });
+    return;
+  }
+  let i = G.toAct;
+  if (i < 0 || !needsAction(G.seats[i])) { i = nextIdx(i < 0 ? G.button : i, needsAction); G.toAct = i; }
+  if (i < 0) { G.timer = setTimeout(step, 0); return; }
+  const p = G.seats[i];
+  if (p.hero) { G.waitingHero = true; tipShown = null; startClock(i); renderAll(); if (opts.tips) setTimeout(() => showTip(false), 10); return; }
+  if (G.mode === "host" && p.human && LIVE.isPresent(p.name)) { G.waitingRemote = i; startClock(i); renderAll(); return; }
+  const d = botDecide(i);
+  const ms = thinkMs(i, d, G.think || {});
+  p.thinking = ms > 0; if (ms > 0) renderAll();
+  const go = () => {
+    G.pending = null; p.thinking = false;
+    const why = explainAction(i, d.type, d.amount);
+    apply(i, d.type, d.amount);
+    if (why) { (G.commentary ||= []).push(why); }
+    G.toAct = nextIdx(i, needsAction);
+    renderAll();
+    announce(() => { G.timer = setTimeout(step, skipping ? 0 : opts.fast ? 150 : 400); });
+  };
+  G.pending = go; G.timer = setTimeout(go, ms);
+}
+function heroAct(type, amount) {
+  if (!G.waitingHero) return;
+  recordHeroDecision(type, amount);
+  G.waitingHero = false; tipShown = null;
+  if (G.mode === "client") { LIVE.sendAction(type, amount); renderAll(); return; }
+  clearTimeout(G.turnTimer); G.deadline = 0;
+  humanApply(ME, type, amount);
+}
+/* A real person's action (this device, or a remote player at a live table) */
+function humanApply(i, type, amount, timedOut) {
+  if (!timedOut) logDecision(i, type, amount);
+  apply(i, type, amount);
+  G.toAct = nextIdx(i, needsAction);
+  renderAll();
+  announce(() => { G.timer = setTimeout(step, delay()); });
+}
+function timeoutAct(i) {
+  if (G.toAct !== i || G.result || G.street === "idle") return;
+  const p = G.seats[i], type = G.currentBet - p.bet === 0 ? "check" : "fold";
+  log(`(${p.name} ran out of time)`);
+  if (i === ME) { G.waitingHero = false; tipShown = null; }
+  G.waitingRemote = -1; G.deadline = 0;
+  humanApply(i, type, 0, true);
+}
+function onRemoteAction(name, a) {
+  const i = SEAT_NAMES.indexOf(name);
+  if (i < 0 || G.waitingRemote !== i || !a || a.hand !== G.handNo || a.n !== G.actN) return;
+  if (!["fold", "check", "call", "raise"].includes(a.type)) return;
+  clearTimeout(G.turnTimer); G.waitingRemote = -1; G.deadline = 0;
+  humanApply(i, a.type, Math.max(0, Math.floor(+a.amount || 0)));
+}
+function finish() {
+  G.result = settle(); G.toAct = -1; G.waitingHero = false; G.waitingRemote = -1; G.deadline = 0; skipping = false;
+  clearTimeout(G.turnTimer);
+  logHand();
+  if (G.mode === "solo") saveSession();
+  if (G.mode === "host" && opts.autoDeal) { G.nextDealAt = serverNow() + AUTO_DEAL_MS; G.autoTimer = setTimeout(deal, AUTO_DEAL_MS); }
+  renderAll();
+  G.say = spokenWinners(G.result); announce(() => {});
+}
+
+/* ===== Data: every real decision is saved so the computer players can learn ===== */
+function posLabel(i) {
+  if (i === G.button) return "BTN"; if (i === G.sbI) return "SB"; if (i === G.bbI) return "BB";
+  const order = []; for (let k = 1; k <= 7; k++) { const j = (G.bbI + k) % 7; if (j === G.button) break; if (G.seats[j].hole.length) order.push(j); }
+  const idx = order.indexOf(i), fromEnd = order.length - idx;
+  return fromEnd === 1 ? "CO" : fromEnd === 2 ? "HJ" : idx === 0 ? "UTG" : "MP";
+}
+function logDecision(i, type, amount) {
+  try {
+    const p = G.seats[i], toCall = G.currentBet - p.bet, pot = potTotal(), maxTo = p.bet + p.stack;
+    const opps = G.seats.filter(q => q !== p && inHand(q));
+    let npc = "";
+    try { const saved = G.think; const d = botDecide(i); G.think = saved; npc = d.type === "raise" ? "raise " + Math.min(snapTo(Math.min(d.amount, maxTo), p), maxTo) : (d.type === "check" && toCall > 0 ? "call" : d.type); } catch {}
+    const act = type === "check" && toCall > 0 ? "call" : type;
+    const rec = { t: Date.now(), v: 2, mode: G.mode, room: LIVE.code || "", device: meName, name: p.name, hand: G.handNo, street: G.street, pos: posLabel(i),
+      hole: p.hole.map(cardStr).join(" "), label: handLabel(p.hole), chen: chen(p.hole), board: G.board.map(cardStr).join(" "),
+      stack: p.stack, committed: p.committed, toCall, pot, currentBet: G.currentBet, raises: G.raisesThisStreet, k: opps.length, opps: opps.map(q => q.name).join(","),
+      aggr: G.lastAggr >= 0 ? G.seats[G.lastAggr].name : "", acts: G.acts.join(" | "),
+      action: act, amount: act === "raise" ? Math.min(snapTo(Math.min(amount, maxTo), p), maxTo) : act === "call" ? Math.min(toCall, p.stack) : 0, npc };
+    if (G.street !== "preflop") { rec.eq = Math.round(equity(p.hole, G.board, Math.min(Math.max(1, opps.length), 5), 400) * 100) / 100; rec.made = madeCat(p.hole, G.board); }
+    dataPush(`decisions/${p.name}`, rec);
+  } catch (e) { console.warn("Couldn't record decision", e); }
+}
+function logHand() {
+  try {
+    const humans = G.seats.filter(p => p.human && p.hole.length).map(p => p.name);
+    if (!humans.length) return;
+    const holes = {}; G.seats.forEach(p => { if (p.hole.length && !p.out) holes[p.name] = p.hole.map(cardStr).join(" ") + (p.folded ? " (folded)" : ""); });
+    dataPush("hands", { t: Date.now(), v: 2, mode: G.mode, room: LIVE.code || "", device: meName, humans: humans.join(","), hand: G.handNo, button: G.seats[G.button].name,
+      board: G.board.map(cardStr).join(" "), holes, log: G.log.join("\n"),
+      winners: G.result.winners.map(w => `${w.name} ${money(w.amount)}${w.hand ? " (" + w.hand + ")" : ""}`).join("; ") });
+  } catch (e) { console.warn("Couldn't record hand", e); }
+}
+
+/* ===== Firebase ===== */
+const FB_CONFIG = {
+  apiKey: "AIzaSyBgyGlVN48gZq4mb-0_qTyyCuODpPchWkk",
+  authDomain: "flat8-poker.firebaseapp.com",
+  databaseURL: "https://flat8-poker-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "flat8-poker",
+  storageBucket: "flat8-poker.firebasestorage.app",
+  messagingSenderId: "15228675589",
+  appId: "1:15228675589:web:ca230baba547631ba19e6c",
+};
+const FBV = "10.12.2";
+let fb = null, fbP = null;
+function fbInit() {
+  return fbP ||= (async () => {
+    const base = `https://www.gstatic.com/firebasejs/${FBV}/`;
+    const [A, Au, D] = await Promise.all([import(base + "firebase-app.js"), import(base + "firebase-auth.js"), import(base + "firebase-database.js")]);
+    const app = A.initializeApp(FB_CONFIG);
+    const auth = Au.getAuth(app);
+    if (params.has("fresh")) await Au.setPersistence(auth, Au.inMemoryPersistence);  // testing: a new identity per tab
+    const cred = await Au.signInAnonymously(auth);
+    const db = D.getDatabase(app);
+    fb = { D, db, uid: cred.user.uid, offset: 0 };
+    D.onValue(D.ref(db, ".info/serverTimeOffset"), s => { fb.offset = s.val() || 0; });
+    return fb;
+  })().catch(e => { fbP = null; throw e; });
+}
+const serverNow = () => Date.now() + (fb ? fb.offset : 0);
+const dataQ = []; let draining = false;
+function dataPush(path, obj) { dataQ.push([path, obj]); drainData(); }
+async function drainData() {
+  if (draining) return; draining = true;
+  try {
+    const f = await fbInit();
+    while (dataQ.length) { const [p, o] = dataQ.shift(); f.D.push(f.D.ref(f.db, p), o).catch(e => console.warn("Save failed", p, e)); }
+  } catch (e) { console.warn("Database unavailable; will retry", e); }
+  draining = false;
+}
+
+/* ===== Live tables: the host's device runs the dealer and the computer players ===== */
+const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const LIVE = {
+  code: null, isHost: false, meta: null, present: {}, offs: [], hostName: "", myHole: null, lastState: null, lastJson: "", lastSayN: null, error: "",
+  presentNames() { const m = this.meta || {}, s = m.seats || {}; return SEAT_NAMES.filter(n => s[n] && this.present[s[n]]); },
+  isPresent(name) { if (name === meName) return true; const uid = this.meta?.seats?.[name]; return !!(uid && this.present[uid]); },
+  async enter(code) {
+    const f = await fbInit(), D = f.D;
+    this.code = code;
+    const pres = D.ref(f.db, `rooms/${code}/meta/present/${f.uid}`);
+    await D.set(pres, meName); D.onDisconnect(pres).remove();
+    this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/meta`), s => this.onMeta(s.val())));
+    history.replaceState(null, "", location.pathname + "?room=" + code);
+  },
+  async host() {
+    const f = await fbInit(), D = f.D;
+    let code = null;
+    for (let t = 0; t < 8 && !code; t++) {
+      const c = Array.from({ length: 4 }, () => CODE_CHARS[rng(CODE_CHARS.length)]).join("");
+      try { await D.set(D.ref(f.db, `rooms/${c}/meta`), { host: f.uid, hostName: meName, created: Date.now(), seats: { [meName]: f.uid } }); code = c; } catch {}
+    }
+    if (!code) throw new Error("Couldn't create a table. Check your connection and try again.");
+    this.isHost = true; this.hostName = meName;
+    resetG("host"); G.seats.forEach(p => p.human = p.name === meName);
+    await this.enter(code);
+    this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/actions`), s => {
+      const all = s.val() || {}, seats = this.meta?.seats || {};
+      for (const [uid, a] of Object.entries(all)) { const name = SEAT_NAMES.find(n => seats[n] === uid); if (name && name !== meName) onRemoteAction(name, a); }
+    }));
+  },
+  async join(code) {
+    const f = await fbInit(), D = f.D;
+    const meta = (await D.get(D.ref(f.db, `rooms/${code}/meta`))).val();
+    if (!meta) throw new Error(`There's no table with the code ${code}.`);
+    if (meta.host === f.uid) throw new Error("You're the host of that table on this device. Open it from the tab you hosted it in.");
+    const holder = meta.seats && meta.seats[meName];
+    if (holder && holder !== f.uid && meta.present && meta.present[holder]) throw new Error(`${meName} is already playing at this table. Pick a different name?`);
+    await D.set(D.ref(f.db, `rooms/${code}/meta/seats/${meName}`), f.uid);
+    this.isHost = false; this.hostName = meta.hostName || "the host";
+    resetG("client");
+    await this.enter(code);
+    this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/state`), s => { const v = s.val(); if (v && v.json) { this.lastState = JSON.parse(v.json); applyState(this.lastState); } }));
+    this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/hole/${f.uid}`), s => { const v = s.val(); this.myHole = v && v.json ? JSON.parse(v.json) : null; if (this.lastState) applyState(this.lastState); }));
+  },
+  onMeta(m) {
+    this.meta = m || {}; this.present = this.meta.present || {};
+    if (this.meta.hostName) this.hostName = this.meta.hostName;
+    if (this.isHost && (G.street === "idle" || G.result)) { this.syncSeats(); renderTable(); this.publish(); }
+    renderBanner();
+  },
+  /* Host, between hands: whoever has joined takes over their seat (with a fresh £10); anyone who left goes back to the computer */
+  syncSeats() {
+    const seats = this.meta?.seats || {};
+    for (const p of G.seats) {
+      const humanNow = p.name === meName || !!(seats[p.name] && this.present[seats[p.name]]);
+      if (humanNow && !p.human) { p.stack = BUYIN; p.buyins = 1; p.out = false; G.log.push(`${p.name} joins the table with £10.`); }
+      if (!humanNow && p.human) G.log.push(`${p.name} has left; the computer plays their seat.`);
+      p.human = humanNow; p.uid = seats[p.name] || null;
+    }
+  },
+  sendHoles() {
+    const D = fb.D;
+    for (const p of G.seats) if (p.human && p.name !== meName && p.uid && p.hole.length) D.set(D.ref(fb.db, `rooms/${this.code}/hole/${p.uid}`), { json: JSON.stringify({ hand: G.handNo, cards: p.hole }) });
+  },
+  publish() {
+    if (!fb || !this.code || !this.isHost) return;
+    const st = {
+      v: 2, host: meName, button: G.button, board: G.board, street: G.street, currentBet: G.currentBet, minRaise: G.minRaise, toAct: G.toAct, handNo: G.handNo, log: G.log,
+      lastAggr: G.lastAggr, raisesThisStreet: G.raisesThisStreet, result: G.result, sbI: G.sbI, bbI: G.bbI, deadline: G.deadline || 0, actN: G.actN, acts: G.acts,
+      commentary: (G.commentary || []).slice(-6), nextDealAt: G.nextDealAt || 0, sayEv: G.sayEv || null,
+      seats: G.seats.map(p => ({ name: p.name, stack: p.stack, buyins: p.buyins, out: p.out, folded: p.folded, allIn: p.allIn, bet: p.bet, committed: p.committed, acted: p.acted, lastAct: p.lastAct, shown: p.shown, thinking: !!p.thinking, human: !!p.human, dealt: p.hole.length > 0, hole: p.shown ? p.hole : [] })),
+    };
+    const json = JSON.stringify(st);
+    if (json === this.lastJson) return;
+    this.lastJson = json;
+    fb.D.set(fb.D.ref(fb.db, `rooms/${this.code}/state`), { json, t: Date.now() }).catch(e => console.warn("Publish failed", e));
+  },
+  sendAction(type, amount) {
+    fb.D.set(fb.D.ref(fb.db, `rooms/${this.code}/actions/${fb.uid}`), { hand: G.handNo, n: G.actN, type, amount: amount || 0, t: Date.now() }).catch(e => console.warn("Action failed", e));
+  },
+  leave() {
+    this.offs.forEach(off => { try { off(); } catch {} }); this.offs = [];
+    if (fb && this.code) {
+      fb.D.remove(fb.D.ref(fb.db, `rooms/${this.code}/meta/present/${fb.uid}`)).catch(() => {});
+      if (this.isHost) fb.D.set(fb.D.ref(fb.db, `rooms/${this.code}/meta/closed`), true).catch(() => {});
+    }
+    Object.assign(this, { code: null, isHost: false, meta: null, present: {}, myHole: null, lastState: null, lastJson: "", lastSayN: null });
+    history.replaceState(null, "", location.pathname);
+  },
+};
+/* Client: draw the table from the host's published state, plus our own cards */
+function applyState(st) {
+  const prevHand = G.handNo, hadResult = !!G.result, wasWaiting = G.waitingHero;
+  Object.assign(G, { button: st.button, board: st.board || [], street: st.street, currentBet: st.currentBet, minRaise: st.minRaise, toAct: st.toAct, handNo: st.handNo, log: st.log || [],
+    lastAggr: st.lastAggr, raisesThisStreet: st.raisesThisStreet, result: st.result, sbI: st.sbI, bbI: st.bbI, deadline: st.deadline, actN: st.actN, acts: st.acts || [],
+    commentary: st.commentary || [], nextDealAt: st.nextDealAt });
+  const mine = LIVE.myHole && LIVE.myHole.hand === st.handNo ? LIVE.myHole.cards : null;
+  G.seats = st.seats.map((q, i) => ({ ...q, hero: i === ME, hole: q.hole && q.hole.length ? q.hole : q.dealt ? (i === ME && mine ? mine : [null, null]) : [] }));
+  if (st.handNo !== prevHand) { G.heroDec = []; tipShown = null; G.heroStart = G.seats[ME].stack + G.seats[ME].committed; }
+  G.waitingHero = G.toAct === ME && !G.result && G.street !== "idle" && !!mine && canAct(G.seats[ME]);
+  if (!G.waitingHero) tipShown = null;
+  // Audio: speak new actions and streets as they happen, and the winners at the end
+  if (st.sayEv && LIVE.lastSayN !== null && st.sayEv.n !== LIVE.lastSayN) speakNow(sayText(st.sayEv.x));
+  LIVE.lastSayN = st.sayEv ? st.sayEv.n : 0;
+  if (G.result && !hadResult && st.handNo === prevHand) speakNow(spokenWinners(G.result));
+  renderAll();
+  if (G.waitingHero && !wasWaiting && opts.tips) setTimeout(() => showTip(false), 10);
+}
+
+/* ===== Lobby, header and live banner ===== */
+let lobbyErr = "", lobbyBusy = false, inLobby = true;
+function showLobby(on) { inLobby = on; document.body.classList.toggle("in-lobby", on); renderLobby(); renderWho(); }
+function renderLobby() {
+  const L = $("lobby"); L.hidden = !inLobby; if (!inLobby) return;
+  L.replaceChildren();
+  const h = document.createElement("h2"); h.textContent = "Who are you?"; L.append(h);
+  const names = document.createElement("div"); names.className = "names";
+  SEAT_NAMES.forEach(n => { const b = btn(n, n === meName ? "on" : "", () => { setMe(n); lobbyErr = ""; renderLobby(); renderWho(); }); b.setAttribute("aria-pressed", n === meName ? "true" : "false"); names.append(b); });
+  L.append(names);
+  const why = document.createElement("p"); why.className = "note";
+  why.textContent = "Play as yourself. Your decisions are saved so the computer version of you learns to play more like the real you.";
+  L.append(why);
+  if (!meName) return;
+  const modes = document.createElement("div"); modes.className = "modes";
+  const m1 = document.createElement("div"); m1.className = "mode";
+  const h1 = document.createElement("h3"); h1.textContent = "Solo"; const p1 = document.createElement("p"); p1.className = "note"; p1.textContent = "You against computer versions of everyone else.";
+  m1.append(h1, p1, btn(`Play solo as ${meName}`, "primary", startSolo)); modes.append(m1);
+  const m2 = document.createElement("div"); m2.className = "mode";
+  const h2 = document.createElement("h3"); h2.textContent = "Host a live table"; const p2 = document.createElement("p"); p2.className = "note"; p2.textContent = "Get a code for the others to join. The computer plays any empty seats. Keep this tab open: it runs the game.";
+  const hb = btn(lobbyBusy ? "Setting up…" : "Host a table", "", startHost); hb.disabled = lobbyBusy;
+  m2.append(h2, p2, hb); modes.append(m2);
+  const m3 = document.createElement("div"); m3.className = "mode";
+  const h3 = document.createElement("h3"); h3.textContent = "Join a live table";
+  const inp = document.createElement("input"); inp.id = "joinCode"; inp.maxLength = 4; inp.placeholder = "CODE"; inp.setAttribute("aria-label", "Table code"); inp.autocomplete = "off";
+  if (params.get("room")) inp.value = params.get("room").toUpperCase();
+  const jb = btn(lobbyBusy ? "Joining…" : "Join", params.get("room") ? "primary" : "", () => startJoin(inp.value)); jb.disabled = lobbyBusy;
+  inp.onkeydown = e => { if (e.key === "Enter") startJoin(inp.value); };
+  m3.append(h3, inp, jb); modes.append(m3);
+  L.append(modes);
+  const err = document.createElement("div"); err.className = "err"; err.setAttribute("role", "status"); err.textContent = lobbyErr; L.append(err);
+}
+function renderWho() {
+  const w = $("who"); w.replaceChildren();
+  $("subtitle").textContent = inLobby ? "" : G.mode === "solo" ? "practice table" : "live table";
+  if (!meName || inLobby) return;
+  const t = document.createElement("span"); t.append("Playing as "); const b = document.createElement("b"); b.textContent = meName; t.append(b);
+  w.append(t, btn(G.mode === "solo" ? "Menu" : "Leave table", "small", () => { if (G.mode !== "solo") LIVE.leave(); else { clearTimeout(G.timer); clearTimeout(G.turnTimer); stopSpeech(); } lobbyErr = ""; showLobby(true); }));
+}
+function renderBanner() {
+  const B = $("banner");
+  if (G.mode === "solo" || !LIVE.code) { B.hidden = true; return; }
+  B.hidden = false; B.replaceChildren();
+  const c = document.createElement("span"); c.append("Table "); const code = document.createElement("span"); code.className = "code"; code.textContent = LIVE.code; c.append(code); B.append(c);
+  const share = btn("Copy invite link", "small", async () => {
+    const url = location.origin + location.pathname + "?room=" + LIVE.code;
+    try { if (navigator.share) await navigator.share({ title: "Flat 8 Poker", text: `Join my poker table: code ${LIVE.code}`, url }); else { await navigator.clipboard.writeText(url); share.textContent = "Link copied"; } } catch {}
+  });
+  B.append(share);
+  const here = document.createElement("span"); const names = LIVE.presentNames();
+  here.textContent = "At the table: " + (names.length ? names.map(n => n === meName ? n + " (you)" : n).join(", ") : meName) + ". The computer plays everyone else.";
+  B.append(here);
+  if (!LIVE.isHost) {
+    const hostUid = LIVE.meta?.host;
+    if (LIVE.meta?.closed) { const w = document.createElement("span"); w.className = "warnmsg"; w.textContent = `${LIVE.hostName} has closed this table.`; B.append(w); }
+    else if (hostUid && LIVE.meta && !LIVE.present[hostUid]) { const w = document.createElement("span"); w.className = "warnmsg"; w.textContent = `${LIVE.hostName} (the host) has disconnected. The game is paused until they're back.`; B.append(w); }
+  } else {
+    const n = document.createElement("span"); n.className = "note"; n.textContent = "You're hosting: keep this tab open."; B.append(n);
+  }
+}
+function enterGame() {
+  $("optShowWrap").hidden = G.mode !== "solo"; $("optAutoWrap").hidden = G.mode !== "host"; $("resetTable").hidden = G.mode !== "solo";
+  $("noteWho").replaceChildren(...["General", ...SEAT_NAMES.filter(n => n !== meName)].map(n => { const o = document.createElement("option"); o.textContent = n; return o; }));
+  $("optTips").checked = opts.tips; $("optFast").checked = opts.fast; $("optShow").checked = opts.showAll; $("optAuto").checked = opts.autoDeal; $("optAudio").checked = opts.audio && speechOK;
+  showLobby(false); renderPlayers(); renderNotes(); renderAll();
+}
+function startSolo() {
+  resetG("solo"); loadSession(); enterGame();
+}
+async function startHost() {
+  if (lobbyBusy) return; lobbyBusy = true; lobbyErr = ""; renderLobby();
+  try { loadSession(); await LIVE.host(); lobbyBusy = false; enterGame(); }
+  catch (e) { lobbyBusy = false; lobbyErr = e.message || "Couldn't reach the server. Check your connection."; LIVE.leave(); renderLobby(); }
+}
+async function startJoin(code) {
+  code = (code || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(code)) { lobbyErr = "Table codes are 4 letters or numbers."; renderLobby(); return; }
+  if (lobbyBusy) return; lobbyBusy = true; lobbyErr = ""; renderLobby();
+  try { loadSession(); await LIVE.join(code); lobbyBusy = false; enterGame(); }
+  catch (e) { lobbyBusy = false; lobbyErr = e.message || "Couldn't reach the server. Check your connection."; LIVE.leave(); renderLobby(); }
+}
+
+/* ===== Audio: speaks each action ("Baran raises to 3 pounds", "Emils calls", "folds" for you) ===== */
+const speechOK = typeof window !== "undefined" && "speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined";
+let speechVoice = null;
+function pickVoice() {
+  if (!speechOK) return;
+  const vs = speechSynthesis.getVoices();
+  speechVoice = vs.find(v => v.lang === "en-GB" && /Daniel|Serena|Kate|Arthur|Google UK/i.test(v.name)) || vs.find(v => v.lang === "en-GB") || vs.find(v => /^en/.test(v.lang)) || null;
+}
+if (speechOK) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function spokenMoney(p) {
+  if (p < 100) return `${p}p`.replace(/p$/, " pee");
+  const L = Math.floor(p / 100), pence = p % 100;
+  return `${L} pound${L === 1 ? "" : "s"}${pence ? " " + pence : ""}`;
+}
+let speechGen = 0;
+function spokenCard(c) { return `${RANK_NAME[cardRank(c)]} of ${["spades", "hearts", "diamonds", "clubs"][cardSuit(c)]}`; }
+function spokenStreet() {
+  const b = G.board;
+  if (G.street === "flop") return "Flop: " + b.slice(0, 3).map(spokenCard).join(", ");
+  return (G.street === "turn" ? "Turn: " : "River: ") + spokenCard(b[b.length - 1]);
+}
+function spokenWinners(res) {
+  if (!res || !res.winners.length) return null;
+  const by = new Map();
+  for (const w of res.winners) { const e = by.get(w.name) || { amount: 0, hand: w.hand }; e.amount += w.amount; by.set(w.name, e); }
+  return [...by].map(([name, e]) => `${name === meName ? "You win" : name + " wins"} ${spokenMoney(e.amount)}${res.showdown && e.hand ? " with " + e.hand.toLowerCase() : ""}`).join(". ");
+}
+const sayText = x => !x ? null : typeof x === "string" ? x : (x.who === meName ? "" : x.who + " ") + x.text;
+function stopSpeech() { speechGen++; if (speechOK) speechSynthesis.cancel(); G.say = null; }
+function speakNow(text) {
+  if (!text || !opts.audio || !speechOK) return;
+  const u = new SpeechSynthesisUtterance(text);
+  if (speechVoice) { u.voice = speechVoice; u.lang = speechVoice.lang; } else u.lang = "en-GB";
+  u.rate = 1.15; speechSynthesis.speak(u);
+}
+// Speak G.say (if audio is on), then run next once it's finished (or after a safety timeout).
+function announce(next) {
+  const text = sayText(G.say); G.say = null;
+  if (!text || !opts.audio || !speechOK || skipping) return next();
+  let done = false; const gen = speechGen;
+  const fin = () => { if (done) return; done = true; clearTimeout(guard); if (gen === speechGen) next(); };
+  const u = new SpeechSynthesisUtterance(text);
+  if (speechVoice) { u.voice = speechVoice; u.lang = speechVoice.lang; } else u.lang = "en-GB";
+  u.rate = opts.fast ? 1.35 : 1.1;
+  u.onend = fin; u.onerror = fin;
+  const guard = setTimeout(fin, 900 + text.length * 90);
+  speechSynthesis.speak(u);
+}
+
+/* ===== Boot ===== */
+let sampleFn = null;
+$("optTips").onchange = e => { opts.tips = e.target.checked; saveSession(); if (G.waitingHero && opts.tips) showTip(false); else renderAll(); };
+$("optFast").onchange = e => { opts.fast = e.target.checked; saveSession(); };
+$("optAuto").onchange = e => { opts.autoDeal = e.target.checked; saveSession(); if (!opts.autoDeal) { clearTimeout(G.autoTimer); G.nextDealAt = 0; renderAll(); } };
+$("optAudio").disabled = !speechOK;
+if (!speechOK) $("optAudio").parentElement.title = "This browser can't speak.";
+$("optAudio").onchange = e => { opts.audio = e.target.checked; saveSession(); if (opts.audio) { G.say = "Audio on"; announce(() => {}); } else if (speechOK) speechSynthesis.cancel(); };
+$("optShow").onchange = e => { opts.showAll = e.target.checked; saveSession(); renderTable(); renderControls(); };
+$("copyHand").onclick = async () => {
+  const hn = notesFor(n => n.hand === G.handNo);
+  const txt = G.log.join("\n") + (hn ? `\nWhat would really happen (${meName}):\n` + hn : "");
+  try { await navigator.clipboard.writeText(txt); $("copyNote").textContent = "Copied."; }
+  catch { const r = document.createRange(); r.selectNodeContents($("log")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $("copyNote").textContent = "Selected. Press Ctrl/Cmd+C."; }
+  setTimeout(() => $("copyNote").textContent = "", 2500);
+};
+$("saveNote").onclick = () => {
+  const ta = $("noteText"), txt = ta.value.trim();
+  if (!txt) { ta.focus(); return; }
+  addNote($("noteWho").value, txt); ta.value = "";
+  $("notesMsg").textContent = "Saved and sent."; setTimeout(() => $("notesMsg").textContent = "", 2000);
+};
+$("copyNotes").onclick = async () => {
+  const txt = allNotesText();
+  if (!txt) { $("notesMsg").textContent = "No notes yet."; setTimeout(() => $("notesMsg").textContent = "", 2500); return; }
+  try { await navigator.clipboard.writeText(txt); $("notesMsg").textContent = "Copied."; }
+  catch { $("notesMsg").textContent = "Couldn't copy automatically."; }
+  setTimeout(() => $("notesMsg").textContent = "", 4000);
+};
+let resetArmed = false;
+$("resetTable").onclick = e => {
+  if (G.mode !== "solo") return;
+  if (G.street !== "idle" && !G.result) { $("copyNote").textContent = "Finish this hand first."; return; }
+  if (!resetArmed) { resetArmed = true; e.target.textContent = "Click again to reset"; setTimeout(() => { resetArmed = false; e.target.textContent = "Reset everyone to £10"; }, 3000); return; }
+  resetArmed = false; e.target.textContent = "Reset everyone to £10";
+  resetG("solo"); saveSession(); renderAll();
+};
+window.addEventListener("resize", () => { if (!inLobby) renderTable(); });
+// Countdown clocks (turn timer, next deal)
+setInterval(() => document.querySelectorAll("[data-deadline]").forEach(el => { el.textContent = el.dataset.prefix + secsLeft(+el.dataset.deadline) + "s"; }), 500);
+window.addEventListener("pagehide", () => { if (LIVE.code) LIVE.leave(); });
+showLobby(true);
+fbInit().catch(() => {});  // sign in early so saving and live tables are ready
+if (window.claude?.use) window.claude.use("sample").then(fn => { sampleFn = fn; renderCoach(); }).catch(() => {});
+</script>
+</body>
+</html>
