@@ -177,6 +177,8 @@ body.in-lobby .game { display: none; }
 .lt .num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lt .pos { color: var(--good); } .lt .neg { color: var(--bad); }
 .lt tr.me td { background: rgba(217,165,74,.12); }
+.coachlog { font-family: var(--f-body); font-size: .84rem; line-height: 1.4; max-height: 300px; display: grid; gap: 4px; align-content: start; }
+.coachlog .cl-street { font-family: var(--f-mono); font-size: .72rem; color: var(--brass); margin-top: 2px; }
 .clocktxt { font-family: var(--f-mono); color: var(--warn); font-weight: 700; }
 </style>
 </head>
@@ -226,20 +228,6 @@ body.in-lobby .game { display: none; }
         <button class="small" id="resetTable">Reset everyone to £10</button>
         <span class="note" id="copyNote"></span>
       </div>
-    </section>
-    <section class="panel notes-panel" aria-label="What would really happen">
-      <h2>What would really happen?</h2>
-      <p class="note">Spot something the real player wouldn't do? Note it here, any time. Notes are saved with the current hand and sent to Josh, so the computer players can be made more like the real ones.</p>
-      <div class="qrow">
-        <select id="noteWho" aria-label="Which player"></select>
-        <textarea id="noteText" placeholder="e.g. Saul would have bet a lot more with trips."></textarea>
-      </div>
-      <div class="btnrow">
-        <button class="small" id="saveNote">Save note</button>
-        <button class="small" id="copyNotes">Copy notes for /poker</button>
-        <span class="note" id="notesMsg"></span>
-      </div>
-      <div class="notes-list" id="notesList"></div>
     </section>
   </div>
 </div>
@@ -739,7 +727,6 @@ function noteHints(names) {
 }
 /* Why an opponent probably did that: uses only what Josh can see (who, action, size, street), never their cards */
 function explainAction(i, type, amount) {
-  if (!FULL() && G.mode === "solo") return null;
   const p = G.seats[i], n = p.name, pot = potTotal(), toCall = G.currentBet - p.bet;
   const opps = G.seats.filter(q => q !== p && inHand(q)), hu = opps.length === 1;
   if (type === "check" && toCall > 0) type = "call";
@@ -1044,7 +1031,7 @@ function loadSession() {
 function resetG(mode) {
   clearTimeout(G.timer); clearTimeout(G.turnTimer); clearTimeout(G.autoTimer); stopSpeech();
   G.mode = mode; G.seats = freshSeats(); syncME();
-  Object.assign(G, { handNo: 0, street: "idle", board: [], deck: [], result: null, log: [], heroDec: [], toAct: -1, waitingHero: false, waitingRemote: -1, deadline: 0, nextDealAt: 0, commentary: [], peek: new Set(), button: 6, currentBet: 0, acts: [], actN: 0, pending: null, sayEv: null });
+  Object.assign(G, { handNo: 0, street: "idle", board: [], deck: [], result: null, log: [], heroDec: [], toAct: -1, waitingHero: false, waitingRemote: -1, deadline: 0, nextDealAt: 0, coachLog: [], peek: new Set(), button: 6, currentBet: 0, acts: [], actN: 0, pending: null, sayEv: null });
   skipping = false; tipShown = null; claudeText = ""; claudeState = "idle";
 }
 
@@ -1242,15 +1229,10 @@ function renderCoachInner() {
     body.append(t);
   } else if (!G.result) {
     const p = document.createElement("p"); p.className = "note";
-    p.textContent = G.handNo === 0 ? "Deal a hand to start. After each hand you'll get a quick review of your decisions." : opts.tips ? (FULL() ? "Coach is on: advice on your turn, plus what the others' bets and raises probably mean." : "Coach is on: advice on your turn.") : "Press Hint on your turn for advice, or turn the coach on. A review comes after each hand.";
+    p.textContent = G.handNo === 0 ? "Deal a hand to start. After each hand you'll get a quick review of your decisions." : opts.tips ? "Coach is on: advice on your turn." : "Press Hint on your turn for advice, or turn the coach on. A review comes after each hand.";
     body.append(p);
   }
-  if (opts.tips && FULL() && !G.result && G.commentary && G.commentary.length) {
-    const cm = document.createElement("div"); cm.className = "commentary";
-    const hd = document.createElement("div"); hd.className = "head"; hd.textContent = "At the table"; cm.append(hd);
-    for (const line of G.commentary.slice(-5)) { const p = document.createElement("div"); p.textContent = line; cm.append(p); }
-    body.append(cm);
-  }
+  if (!G.result) renderCoachLog(body);
   if (G.result) {
     const sum = document.createElement("div"); sum.className = "summary";
     const r = document.createElement("div"); r.className = "result";
@@ -1296,10 +1278,25 @@ function renderCoachInner() {
       if (unseen.length) br.append(btn("Show everyone's cards", "small", () => { unseen.forEach(p => { p.shown = true; G.log.push(`(${p.name} had ${p.hole.map(cardStr).join(" ")})`); }); renderAll(); }));
       body.append(br);
     }
+    renderCoachLog(body);
     renderClaude(body);
   }
 }
 
+function renderCoachLog(body) {
+  if (!G.handNo) return;
+  const lines = (G.coachLog || []).filter(x => x.who !== meName);
+  const hd = document.createElement("div"); hd.className = "subhead"; hd.textContent = "Coach's log"; body.append(hd);
+  const box = document.createElement("div"); box.className = "log coachlog"; box.id = "coachLog";
+  if (!lines.length) box.textContent = "Why each player did what they did will appear here as the hand goes on.";
+  const name = { preflop: "Pre-flop", flop: "Flop", turn: "Turn", river: "River" };
+  let last = null;
+  for (const x of lines) {
+    if (x.st !== last) { const s = document.createElement("div"); s.className = "cl-street"; s.textContent = "— " + name[x.st]; box.append(s); last = x.st; }
+    const d = document.createElement("div"); d.textContent = FULL() ? x.f : x.g; box.append(d);
+  }
+  body.append(box); box.scrollTop = box.scrollHeight;
+}
 function renderClaude(body) {
   if (!sampleFn || G.mode !== "solo") return;
   const wrap = document.createElement("div"); wrap.style.display = "grid"; wrap.style.gap = "8px";
@@ -1329,7 +1326,7 @@ function allNotesText() {
   return getNotes().map(n => `=== ${n.who} · hand ${n.hand} (${n.date}) ===\nNote: ${n.note}${n.log.length ? "\nHand history:\n" + n.log.join("\n") : ""}`).join("\n\n");
 }
 function renderNotes() {
-  const list = $("notesList"); list.replaceChildren();
+  const list = $("notesList"); if (!list) return; list.replaceChildren();
   const n = getNotes();
   if (!n.length) { const p = document.createElement("p"); p.className = "note"; p.textContent = "No notes yet."; list.append(p); return; }
   n.slice().reverse().forEach(x => {
@@ -1424,7 +1421,7 @@ const delay = () => skipping ? 0 : opts.fast ? 250 : 750;
 function deal() {
   if (G.mode === "client") return;
   stopSpeech();
-  clearTimeout(G.timer); clearTimeout(G.autoTimer); G.nextDealAt = 0; G.pending = null; skipping = false; claudeText = ""; claudeState = "idle"; claudeCtl?.abort(); tipShown = null; G.commentary = [];
+  clearTimeout(G.timer); clearTimeout(G.autoTimer); G.nextDealAt = 0; G.pending = null; skipping = false; claudeText = ""; claudeState = "idle"; claudeCtl?.abort(); tipShown = null; G.coachLog = [];
   if (G.mode === "host") LIVE.syncSeats();
   const r = startHand();
   if (r === "hero-broke") { G.street = "idle"; renderAll(); return; }
@@ -1455,15 +1452,14 @@ function step() {
   const p = G.seats[i];
   if (p.hero) { G.waitingHero = true; tipShown = null; startClock(i); renderAll(); if (opts.tips) setTimeout(() => showTip(false), 10); return; }
   if (G.mode === "host" && p.human && LIVE.isPresent(p.name)) { G.waitingRemote = i; startClock(i); renderAll(); return; }
-  if (!PROFILES[p.name]) { apply(i, G.currentBet - p.bet === 0 ? "check" : "fold", 0); G.toAct = nextIdx(i, needsAction); renderAll(); G.timer = setTimeout(step, delay()); return; }
+  if (!PROFILES[p.name]) { noteAction(i, G.currentBet - p.bet === 0 ? "check" : "fold", 0); apply(i, G.currentBet - p.bet === 0 ? "check" : "fold", 0); G.toAct = nextIdx(i, needsAction); renderAll(); G.timer = setTimeout(step, delay()); return; }
   const d = botDecide(i);
   const ms = thinkMs(i, d, G.think || {});
   p.thinking = ms > 0; if (ms > 0) renderAll();
   const go = () => {
     G.pending = null; p.thinking = false;
-    const why = explainAction(i, d.type, d.amount);
+    noteAction(i, d.type, d.amount);
     apply(i, d.type, d.amount);
-    if (why) { (G.commentary ||= []).push(why); }
     G.toAct = nextIdx(i, needsAction);
     renderAll();
     announce(() => { G.timer = setTimeout(step, skipping ? 0 : opts.fast ? 150 : 400); });
@@ -1481,6 +1477,7 @@ function heroAct(type, amount) {
 /* A real person's action (this device, or a remote player at a live table) */
 function humanApply(i, type, amount, timedOut) {
   if (!timedOut) logDecision(i, type, amount);
+  noteAction(i, type, amount);
   apply(i, type, amount);
   G.toAct = nextIdx(i, needsAction);
   renderAll();
@@ -1510,6 +1507,62 @@ function finish() {
   renderAll();
   G.say = spokenWinners(G.result); announce(() => {});
 }
+
+/* ===== Coach's log: why each player probably did what they did (public information only, never their cards) ===== */
+const LIMP_WHY = {
+  Josh: "Josh limps most playable hands and saves his raises for good ones.",
+  Vadim: "Vadim limps lots of hands (any suited hand, any ace, any queen or king) to see a cheap flop.",
+  Saul: "Saul limps any queen, king or ace and suited jacks, hoping to hit and chase.",
+  Baran: "Baran plays almost every hand, so a limp tells you nothing.",
+  Jesal: "Jesal always limps for 20p, whatever he has.",
+  Evan: "Evan limps his playable hands and anything suited.",
+  Emils: "Emils plays every hand, so this means nothing.",
+};
+const CHECK_WHY = {
+  Josh: "Josh checks his weak and medium hands; he bets his good ones.",
+  Vadim: "Vadim checks when he has little, but he also checks big hands to set up a check-raise.",
+  Saul: "Saul usually checks when he has little.",
+  Baran: "Baran checks: weak, or waiting to see if a bluff opens up later.",
+  Jesal: "Jesal plays fit-or-fold, so a check usually means he missed.",
+  Evan: "Evan checks when he misses and bets his real hands.",
+  Emils: "Emils only bets when he's strong, so a check means weak or medium.",
+};
+function coachNote(i, type, amount) {
+  const p = G.seats[i], n = p.name, toCall = G.currentBet - p.bet, pot = potTotal(), pre = G.street === "preflop";
+  if (type === "check" && toCall > 0) type = "call";
+  let to = type === "raise" ? Math.min(snapTo(Math.min(amount, p.bet + p.stack), p), p.bet + p.stack) : 0;
+  if (type === "raise" && to <= G.currentBet) { type = "call"; to = 0; }  // can't raise: it's really a call (often all-in)
+  const allIn = type === "raise" ? to >= p.bet + p.stack : type === "call" && toCall >= p.stack;
+  const limp = pre && type === "call" && G.currentBet === BB;
+  const what = type === "fold" ? "folds" : type === "check" ? "checks" : type === "call" ? (limp ? (toCall === 0 ? "checks" : "limps for 20p") : `calls ${short(Math.min(toCall, p.stack))}${allIn ? " (all-in)" : ""}`) : allIn ? `goes all-in for ${short(to)}` : G.currentBet === 0 ? `bets ${short(to)}` : `raises to ${short(to)}`;
+  const frac = type === "raise" ? (to - G.currentBet) / Math.max(1, pot + toCall) : 0;
+  let g;
+  if (pre) {
+    if (type === "fold") g = toCall > BB ? "The raise was too much for their hand." : "Not a hand worth paying 20p for.";
+    else if (type === "check") g = "A free flop in the big blind.";
+    else if (limp) g = toCall === 0 ? "A free flop in the big blind." : "A cheap look at the flop. Most of this table limps any playable hand.";
+    else if (type === "call") g = G.currentBet <= 50 ? "A small raise is cheap to call with lots of hands." : "Calling a real raise usually means a decent hand, but not one worth re-raising.";
+    else g = to <= 50 ? "A small raise: at this table that can be quite a wide range." : allIn ? "An all-in before the flop: usually a big hand, or a gamble." : "Pre-flop raises are rare here and usually mean a strong hand.";
+  } else {
+    if (type === "check") g = "Usually a weak or medium hand, though good players sometimes check strong hands to trap.";
+    else if (type === "fold") g = `Facing ${short(toCall)} into a ${money(pot)} pot, they didn't have enough to carry on.`;
+    else if (type === "call") g = `They needed about ${pct(toCall / (pot + toCall))} equity to call, so probably a made hand or a draw${toCall <= 50 ? ", or it was just cheap" : ""}.`;
+    else if (G.currentBet > 0) g = "Raises after the flop are rare here: usually two pair or better.";
+    else g = frac >= 0.75 ? "A big bet: usually a strong hand at this table." : frac <= 0.45 ? "A small bet: a medium hand, a draw or a cheap stab." : "A medium bet: usually a decent made hand.";
+  }
+  let f = explainAction(i, type, amount);
+  if (!f) {
+    let why = null;
+    if (limp && toCall > 0) why = LIMP_WHY[n];
+    else if (!pre && type === "check") why = CHECK_WHY[n];
+    else if (pre && type === "fold" && toCall > BB) why = n === "Baran" ? "Baran only folds to raises bigger than 50p, and this one was too big for his hand." : n === "Jesal" ? "Jesal hates pre-flop raises and usually folds to them." : n === "Emils" ? "Emils almost never folds before the flop: the price was too high even for him." : null;
+    else if (!pre && type === "fold") why = n === "Emils" ? "Emils only folds to a big bet when he has nothing at all." : n === "Vadim" ? "Vadim folds well when he thinks he's beaten." : null;
+    else if (!pre && type === "call") why = CALLER[n] || null;
+    f = `${n} ${what}. ${why || g}`;
+  }
+  return { st: G.street, who: n, f, g: `${n} ${what}. ${g}` };
+}
+function noteAction(i, type, amount) { try { (G.coachLog ||= []).push(coachNote(i, type, amount)); } catch (e) { console.warn("Coach note failed", e); } }
 
 /* ===== Data: every real decision is saved so the computer players can learn ===== */
 function posLabel(i) {
@@ -1765,7 +1818,7 @@ const LIVE = {
     const st = {
       v: 2, host: meName, button: G.button, board: G.board, street: G.street, currentBet: G.currentBet, minRaise: G.minRaise, toAct: G.toAct, handNo: G.handNo, log: G.log,
       lastAggr: G.lastAggr, raisesThisStreet: G.raisesThisStreet, result: G.result, sbI: G.sbI, bbI: G.bbI, deadline: G.deadline || 0, actN: G.actN, acts: G.acts,
-      commentary: (G.commentary || []).slice(-6), nextDealAt: G.nextDealAt || 0, sayEv: G.sayEv || null,
+      coachLog: G.coachLog || [], nextDealAt: G.nextDealAt || 0, sayEv: G.sayEv || null,
       seats: G.seats.map(p => ({ name: p.name, stack: p.stack, buyins: p.buyins, out: p.out, folded: p.folded, allIn: p.allIn, bet: p.bet, committed: p.committed, acted: p.acted, lastAct: p.lastAct, shown: p.shown, thinking: !!p.thinking, human: !!p.human, dealt: p.hole.length > 0, hole: p.shown ? p.hole : [] })),
     };
     const json = JSON.stringify(st);
@@ -1791,7 +1844,7 @@ function applyState(st) {
   const prevHand = G.handNo, hadResult = !!G.result, wasWaiting = G.waitingHero;
   Object.assign(G, { button: st.button, board: st.board || [], street: st.street, currentBet: st.currentBet, minRaise: st.minRaise, toAct: st.toAct, handNo: st.handNo, log: st.log || [],
     lastAggr: st.lastAggr, raisesThisStreet: st.raisesThisStreet, result: st.result, sbI: st.sbI, bbI: st.bbI, deadline: st.deadline, actN: st.actN, acts: st.acts || [],
-    commentary: st.commentary || [], nextDealAt: st.nextDealAt });
+    coachLog: st.coachLog || [], nextDealAt: st.nextDealAt });
   const mine = LIVE.myHole && LIVE.myHole.hand === st.handNo ? LIVE.myHole.cards : null;
   const seatsIn = st.seats.some(q => q.name === meName) ? st.seats : st.seats.concat([{ name: meName, stack: BUYIN, buyins: 1, out: true, folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "Sitting in next hand", shown: false, human: true, dealt: false, hole: [] }]);
   ME = seatsIn.findIndex(q => q.name === meName);
@@ -1870,9 +1923,8 @@ function renderBanner() {
 }
 function enterGame() {
   $("optShowWrap").hidden = G.mode !== "solo"; $("optAutoWrap").hidden = G.mode !== "host"; $("resetTable").hidden = G.mode !== "solo";
-  $("noteWho").replaceChildren(...["General", ...SEAT_NAMES.filter(n => n !== meName)].map(n => { const o = document.createElement("option"); o.textContent = n; return o; }));
   $("optTips").checked = opts.tips; $("optFast").checked = opts.fast; $("optShow").checked = opts.showAll; $("optAuto").checked = opts.autoDeal; $("optAudio").checked = opts.audio && speechOK;
-  showLobby(false); renderPlayers(); renderNotes(); renderAll();
+  showLobby(false); renderPlayers(); renderAll();
 }
 function startSolo() {
   resetG("solo"); loadSession(); enterGame();
@@ -1954,19 +2006,6 @@ $("copyHand").onclick = async () => {
   try { await navigator.clipboard.writeText(txt); $("copyNote").textContent = "Copied."; }
   catch { const r = document.createRange(); r.selectNodeContents($("log")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $("copyNote").textContent = "Selected. Press Ctrl/Cmd+C."; }
   setTimeout(() => $("copyNote").textContent = "", 2500);
-};
-$("saveNote").onclick = () => {
-  const ta = $("noteText"), txt = ta.value.trim();
-  if (!txt) { ta.focus(); return; }
-  addNote($("noteWho").value, txt); ta.value = "";
-  $("notesMsg").textContent = "Saved and sent."; setTimeout(() => $("notesMsg").textContent = "", 2000);
-};
-$("copyNotes").onclick = async () => {
-  const txt = allNotesText();
-  if (!txt) { $("notesMsg").textContent = "No notes yet."; setTimeout(() => $("notesMsg").textContent = "", 2500); return; }
-  try { await navigator.clipboard.writeText(txt); $("notesMsg").textContent = "Copied."; }
-  catch { $("notesMsg").textContent = "Couldn't copy automatically."; }
-  setTimeout(() => $("notesMsg").textContent = "", 4000);
 };
 let resetArmed = false;
 $("resetTable").onclick = e => {
