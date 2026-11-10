@@ -1026,14 +1026,14 @@ const store = {
 const opts = { tips: false, fast: false, showAll: false, audio: false, autoDeal: true };
 function saveSession() {
   const keep = { opts, notes: notesCache || store.get()?.notes || [] };
-  if (G.mode === "solo") Object.assign(keep, { seats: G.seats.map(p => ({ stack: p.stack, buyins: p.buyins, out: p.out })), button: G.button, handNo: G.handNo });
+  if (G.mode === "solo") Object.assign(keep, { seats: G.seats.map(p => ({ stack: p.stack, buyins: p.buyins, out: p.out, counted: !!p.counted })), button: G.button, handNo: G.handNo });
   else { const old = store.get(); if (old) Object.assign(keep, { seats: old.seats, button: old.button, handNo: old.handNo }); }
   store.set(keep);
 }
 function loadSession() {
   const s = store.get(); if (!s) return;
   if (G.mode === "solo") {
-    s.seats?.forEach((q, i) => { if (G.seats[i]) Object.assign(G.seats[i], { stack: q.stack, buyins: q.buyins, out: q.out }); });
+    s.seats?.forEach((q, i) => { if (G.seats[i]) Object.assign(G.seats[i], { stack: q.stack, buyins: q.buyins, out: q.out, counted: !!q.counted }); });
     if (typeof s.button === "number") G.button = s.button;
     if (typeof s.handNo === "number") G.handNo = s.handNo;
   }
@@ -1416,6 +1416,7 @@ function deal() {
   if (r === "hero-broke") { G.street = "idle"; renderAll(); return; }
   if (r === "no-players") { G.log = ["Not enough players left with chips. Reset everyone to £10 to keep playing."]; G.street = "idle"; renderAll(); return; }
   if (G.mode === "host") LIVE.sendHoles();
+  countOpeningBuyins();
   renderAll(); G.timer = setTimeout(step, delay());
 }
 function startClock(i) {
@@ -1543,6 +1544,20 @@ function onRebuy(p) {
     totalsUpdate(up);
     p.lossSince = { bots: 0, humans: 0 };
   } catch (e) { console.warn("Couldn't record buy-in", e); }
+}
+// The £10 someone sits down with counts as a buy-in too, split by who else is at the table (solo: all against the computer)
+function countOpeningBuyins() {
+  if (G.mode === "client") return;
+  const up = {};
+  for (const p of G.seats) {
+    if (p.counted || !p.hole.length) continue;
+    p.counted = true;
+    const others = G.seats.filter(q => q !== p && !q.out);
+    const nh = others.filter(q => q.human).length, nb = others.length - nh, base = `totals/${kindOf(p)}/${p.name}`;
+    if (nb) up[`${base}/bots/buyins`] = nb / (nh + nb);
+    if (nh) up[`${base}/humans/buyins`] = nh / (nh + nb);
+  }
+  totalsUpdate(up);
 }
 function recordLedger(res) {
   try {
@@ -1721,7 +1736,7 @@ const LIVE = {
     }
     for (const p of G.seats) {
       const humanNow = p.name === meName || !!(seats[p.name] && this.present[seats[p.name]]);
-      if (humanNow && !p.human) { p.stack = BUYIN; p.buyins = 1; p.out = false; G.log.push(`${p.name} joins the table with £10.`); }
+      if (humanNow && !p.human) { p.stack = BUYIN; p.buyins = 1; p.out = false; p.counted = false; G.log.push(`${p.name} joins the table with £10.`); }
       if (!humanNow && p.human) G.log.push(`${p.name} has left; the computer plays their seat.`);
       p.human = humanNow; p.uid = seats[p.name] || null;
     }
