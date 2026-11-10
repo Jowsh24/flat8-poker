@@ -359,7 +359,7 @@ function handLabel(hole) {
 }
 
 /* ===== Players ===== */
-const SB = 10, BB = 20, BUYIN = 1000, BOT_REBUY_BELOW = 200; // pence
+const SB = 10, BB = 20, BUYIN = 1000, REBUY_BELOW = 200; // pence
 const PROFILES = {
   Vadim: { rank: 1, blurb: "Best player. Limps, plays speculative hands (limps any suited hand, and never folds an ace pre-flop: limps, makes it 50p or calls up to £1.50 even with A2) to see turns and rivers, builds pots cleverly when strong, folds well, bluffs only occasionally.",
     limp: 5, suitedAny: true, anyAce: true, ace50: 0.35, aceCallTo: 150, highLimp: true, raise: 12, callRaise: 8, callShove: 10, cheapCall: { flop: 50, turn: 50, river: 100 }, valueR: 1.5, raiseR: 2.1, slow: 0.45, bluff: 0.06, bluffHU: 0.08, callMul: 1.0, size: [0.55, 0.75], big: [0.7, 0.95], rebuys: true },
@@ -422,9 +422,9 @@ function post(i, amt) {
 function startHand() {
   const rebuyNotes = [];
   for (const p of G.seats) {
-    if (p.human && G.mode === "host" && p.stack < 50) { if (typeof onRebuy === "function") onRebuy(p); p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`); continue; }
-    // Every computer player buys back in for £10 once they're under £2 (Josh, 10 Nov 2026)
-    if (!p.human && PROFILES[p.name] && (p.out || p.stack < BOT_REBUY_BELOW)) {
+    // Everyone, real or computer, buys back in for £10 once they're under £2 (Josh, 10 Nov 2026)
+    if (p.human && p.stack < REBUY_BELOW) { if (typeof onRebuy === "function") onRebuy(p); p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`); continue; }
+    if (!p.human && PROFILES[p.name] && (p.out || p.stack < REBUY_BELOW)) {
       if (typeof onRebuy === "function") onRebuy(p); p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`);
     }
   }
@@ -1188,8 +1188,8 @@ function renderControls() {
       else w.textContent = `Waiting for ${LIVE.hostName || "the host"} to deal…`;
       row.append(w);
     } else {
-      if (solo && h.stack < 50) row.append(btn("Buy in again for £10", "primary", () => { onRebuy(h); h.stack += BUYIN; h.buyins++; saveSession(); renderAll(); }));
-      if (h.stack > 0 || !solo) row.append(btn(G.handNo ? "Deal next hand" : "Deal first hand", solo && h.stack < 50 ? "" : "primary", deal));
+      if (h.stack < REBUY_BELOW && G.handNo) { const w = document.createElement("span"); w.className = "waiting"; w.textContent = "You're under £2, so you'll buy in again for £10 next hand."; row.append(w); }
+      row.append(btn(G.handNo ? "Deal next hand" : "Deal first hand", "primary", deal));
       if (G.mode === "host" && G.nextDealAt) { const w = document.createElement("span"); w.className = "waiting"; w.textContent = "Auto-deal in "; const ck = document.createElement("span"); ck.className = "clocktxt"; ck.dataset.deadline = G.nextDealAt; ck.dataset.prefix = ""; ck.textContent = secsLeft(G.nextDealAt) + "s"; w.append(ck); row.append(w); }
     }
   } else {
