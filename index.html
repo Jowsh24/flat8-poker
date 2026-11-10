@@ -167,6 +167,16 @@ body.in-lobby .game { display: none; }
 .seat.peekable { cursor: pointer; }
 .seat.peekable:hover .plate { border-color: var(--ink-dim); }
 .seat .act.clock { color: var(--warn); font-family: var(--f-mono); font-weight: 700; }
+.lifetime { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.lt-me { margin: 0; font-weight: 600; }
+.lt-sec h3 { margin: 0 0 4px; font-family: var(--f-display); font-weight: 400; font-size: 1rem; }
+.lt-wrap { overflow-x: auto; }
+.lt { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.lt th { text-align: left; color: var(--ink-dim); font-weight: 600; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.lt td { padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.lt .num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lt .pos { color: var(--good); } .lt .neg { color: var(--bad); }
+.lt tr.me td { background: rgba(217,165,74,.12); }
 .clocktxt { font-family: var(--f-mono); color: var(--warn); font-weight: 700; }
 </style>
 </head>
@@ -365,8 +375,10 @@ const PROFILES = {
     limp: -9, raise: 13, callRaise: -9, callShove: 6, station: true, nothingCap: 200, valueR: 2.0, raiseR: 2.4, slow: 0, bluff: 0, bluffHU: 0, callMul: 0.3, size: [0.5, 0.8], big: [0.8, 1.1], rebuys: true },
 };
 PROFILES.Josh = { rank: 0, blurb: "Plays conservatively and usually makes the right call, fold or raise. Limps most playable hands; loves a £1.50 raise pre-flop (77+, AJ+, KQ) or on the flop with top pair, good kicker or better. Bluffs very, very rarely, though he'll sometimes stab at a heads-up river with a missed ace or king. Limps wide late when others have limped and raises suited aces to £1 in position.",
-  limp: 3, raise: 99, raise150: true, flop150: true, lateLimpAny: 1, suitedAceRaise: 0.5, riverStab: 0.25, callRaise: 9, callShove: 11, valueR: 1.5, raiseR: 2.1, slow: 0.08, bluff: 0.015, bluffHU: 0.025, callMul: 1.08, minR: 0.8, size: [0.5, 0.7], big: [0.7, 0.9], rebuys: true };
+  limp: 3, raise: 99, raise150: true, flop150: true, lateLimpAny: 1, suitedAceRaise: 0.35, riverStab: 0.1, callRaise: 9, callShove: 11, valueR: 1.5, raiseR: 2.1, slow: 0.08, bluff: 0.015, bluffHU: 0.025, callMul: 1.08, minR: 0.8, size: [0.5, 0.7], big: [0.7, 0.9], rebuys: true };
 const SEAT_NAMES = ["Josh", "Vadim", "Saul", "Baran", "Jesal", "Evan", "Emils"];
+const GUESTS = ["Player 1", "Player 2"];  // extra seats for people who aren't one of the 7; no computer version, so they only sit in when someone plays them
+const ALL_NAMES = SEAT_NAMES.concat(GUESTS);
 const rand = (a, b) => a + Math.random() * (b - a);
 const money = p => (p < 0 ? "-£" : "£") + (Math.abs(p) / 100).toFixed(2);
 const short = p => p < 100 ? p + "p" : money(p);
@@ -387,16 +399,19 @@ function snapTo(amount, p) {
 const nearestStep = v => LADDER.reduce((b, x) => Math.abs(x - v) < Math.abs(b - v) ? x : b, LADDER[0]);
 
 /* ===== Game state ===== */
-function freshSeats() {
-  return SEAT_NAMES.map((name, i) => ({ name, hero: i === ME, human: i === ME, stack: BUYIN, buyins: 1, out: false, hole: [], folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "", shown: false }));
+function newSeat(name) { return { name, hero: name === ME_NAME, human: name === ME_NAME, stack: BUYIN, buyins: 1, out: false, hole: [], folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "", shown: false, lossSince: { bots: 0, humans: 0 } }; }
+function freshSeats(guests) {
+  const g = guests || (GUESTS.includes(ME_NAME) ? [ME_NAME] : []);
+  return SEAT_NAMES.concat(GUESTS.filter(n => g.includes(n))).map(newSeat);
 }
-let ME = 0;  // seat index of the person playing on this device
+let ME_NAME = null;  // who is playing on this device
+let ME = -1;  // their seat index
 const G = { mode: "solo", acts: [], actN: 0, seats: freshSeats(), button: 6, board: [], deck: [], street: "idle", currentBet: 0, minRaise: BB, toAct: -1, handNo: 0, log: [], heroDec: [], lastAggr: -1, raisesThisStreet: 0, result: null, waitingHero: false, timer: null };
 
 const inHand = p => !p.out && p.hole.length && !p.folded;
 const canAct = p => inHand(p) && !p.allIn;
 const potTotal = () => G.seats.reduce((s, p) => s + p.committed, 0);
-function nextIdx(i, pred) { for (let k = 1; k <= 7; k++) { const j = (i + k) % 7; if (pred(G.seats[j])) return j; } return -1; }
+function nextIdx(i, pred) { const N = G.seats.length; for (let k = 1; k <= N; k++) { const j = (i + k) % N; if (pred(G.seats[j])) return j; } return -1; }
 function log(line) { G.log.push(line); }
 
 function post(i, amt) {
@@ -407,9 +422,9 @@ function post(i, amt) {
 function startHand() {
   const rebuyNotes = [];
   for (const p of G.seats) {
-    if (p.human && G.mode === "host" && p.stack < 50) { p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`); continue; }
+    if (p.human && G.mode === "host" && p.stack < 50) { if (typeof onRebuy === "function") onRebuy(p); p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`); continue; }
     if (!p.human && (p.out ? PROFILES[p.name].rebuys : (p.stack === 0 || (p.stack < 50 && PROFILES[p.name].rebuys)))) {
-      if (PROFILES[p.name].rebuys) { p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`); }
+      if (PROFILES[p.name].rebuys) { if (typeof onRebuy === "function") onRebuy(p); p.out = false; p.stack += BUYIN; p.buyins++; rebuyNotes.push(`${p.name} buys in again for £10.`); }
       else { p.out = true; rebuyNotes.push(`${p.name} is out of chips and sits out.`); }
     }
   }
@@ -420,7 +435,7 @@ function startHand() {
 
   G.handNo++; G.heroStart = G.seats[ME] ? G.seats[ME].stack : 0; G.board = []; G.deck = newDeck(); G.log = []; G.heroDec = []; G.result = null; G.lastAggr = -1; G.raisesThisStreet = 0; G.acts = []; G.peek = new Set();
   for (const p of G.seats) { p.hole = []; p.folded = p.out || p.stack === 0; p.allIn = false; p.bet = 0; p.committed = 0; p.acted = false; p.lastAct = ""; p.shown = false; p.thinking = false; }
-  G.button = nextIdx(G.button, p => !p.folded);
+  G.button = nextIdx(Math.min(G.button, G.seats.length - 1), p => !p.folded);
   const heads = active.length === 2;
   const sbI = heads ? G.button : nextIdx(G.button, p => !p.folded);
   const bbI = nextIdx(sbI, p => !p.folded);
@@ -428,7 +443,7 @@ function startHand() {
   log(`Hand ${G.handNo} · button ${G.seats[G.button].name}`);
   for (const n of rebuyNotes) log(n);
   log(`${G.seats[sbI].name} posts SB ${short(post(sbI, SB))}, ${G.seats[bbI].name} posts BB ${short(post(bbI, BB))}`);
-  for (let r = 0; r < 2; r++) for (let k = 1; k <= 7; k++) { const p = G.seats[(G.button + k) % 7]; if (!p.folded) p.hole.push(G.deck.pop()); }
+  for (let r = 0; r < 2; r++) for (let k = 1; k <= G.seats.length; k++) { const p = G.seats[(G.button + k) % G.seats.length]; if (!p.folded) p.hole.push(G.deck.pop()); }
   if (G.mode === "solo") log(`${hero.name} is dealt ${hero.hole.map(cardStr).join(" ")}`);
   G.street = "preflop"; G.currentBet = BB; G.minRaise = BB;
   G.toAct = nextIdx(bbI, canAct);
@@ -489,8 +504,10 @@ function startStreet() {
 function settle() {
   const live = G.seats.filter(inHand);
   const res = { showdown: live.length > 1, winners: [], hands: [] };
+  const flows = new Map(), flow = (f, t, a) => { if (f === t || a <= 0) return; const k = f.name + "|" + t.name; flows.set(k, (flows.get(k) || 0) + a); };
   if (live.length === 1) {
     const amt = potTotal(); live[0].stack += amt; res.winners.push({ name: live[0].name, amount: amt });
+    for (const q of G.seats) flow(q, live[0], q.committed);
     log(`${live[0].name} wins ${money(amt)} (everyone else folded)`);
   } else {
     const scores = new Map(live.map(p => [p, bestScore([...p.hole, ...G.board])]));
@@ -503,7 +520,10 @@ function settle() {
       const top = Math.max(...elig.map(p => scores.get(p)));
       const ws = elig.filter(p => scores.get(p) === top);
       const share = Math.floor(pot / ws.length / 10) * 10; let rem = pot - share * ws.length;
-      for (const w of ws) { let a = share; if (rem > 0) { a += rem; rem = 0; } w.stack += a; won.set(w, (won.get(w) || 0) + a); }
+      for (const w of ws) {
+        let a = share; if (rem > 0) { a += rem; rem = 0; } w.stack += a; won.set(w, (won.get(w) || 0) + a);
+        if (pot > 0) for (const q of G.seats) flow(q, w, (Math.min(q.committed, lv) - Math.min(q.committed, prev)) * a / pot);
+      }
       if (!firstWs) firstWs = ws;
       else if (pot > 0 && ws.some(w => !firstWs.includes(w))) {
         const short_ = live.filter(p => p.committed < lv && scores.get(p) > top).map(p => p.name);
@@ -512,10 +532,11 @@ function settle() {
       paid += pot; prev = lv;
     }
     const leftover = potTotal() - paid;
-    if (leftover > 0) { const w = [...won.keys()][0]; w.stack += leftover; won.set(w, won.get(w) + leftover); }
+    if (leftover > 0) { const w = [...won.keys()][0]; w.stack += leftover; won.set(w, won.get(w) + leftover); for (const q of G.seats) flow(q, w, q.committed - Math.min(q.committed, prev)); }
     for (const [w, a] of won) { res.winners.push({ name: w.name, amount: a, hand: describe(scores.get(w)) }); log(`${w.name} wins ${money(a)} with ${describe(scores.get(w))}`); }
     res.notes = notes; notes.forEach(n => log(`(${n})`));
   }
+  res.flows = [...flows].map(([k, a]) => { const [f, t] = k.split("|"); return { f, t, a: Math.round(a * 100) / 100 }; });
   for (const p of G.seats) p.committed = 0;
   return res;
 }
@@ -993,8 +1014,9 @@ const ident = {
   set(n) { try { localStorage.setItem("flat8poker.me", n); } catch {} },
 };
 let meName = null;
-function setMe(name) { meName = name; ME = SEAT_NAMES.indexOf(name); ident.set(name); }
-{ const saved = ident.get(); if (SEAT_NAMES.includes(saved)) setMe(saved); }
+function setMe(name) { meName = name; ME_NAME = name; ident.set(name); }
+const syncME = () => { ME = G.seats.findIndex(p => p.name === meName); G.seats.forEach((p, i) => p.hero = i === ME); };
+{ const saved = ident.get(); if (ALL_NAMES.includes(saved)) setMe(saved); }
 
 const storeKey = () => (!meName || meName === "Josh") ? "flat8poker.v1" : "flat8poker.v1." + meName;
 const store = {
@@ -1020,16 +1042,16 @@ function loadSession() {
 }
 function resetG(mode) {
   clearTimeout(G.timer); clearTimeout(G.turnTimer); clearTimeout(G.autoTimer); stopSpeech();
-  G.mode = mode; G.seats = freshSeats();
+  G.mode = mode; G.seats = freshSeats(); syncME();
   Object.assign(G, { handNo: 0, street: "idle", board: [], deck: [], result: null, log: [], heroDec: [], toAct: -1, waitingHero: false, waitingRemote: -1, deadline: 0, nextDealAt: 0, commentary: [], peek: new Set(), button: 6, currentBet: 0, acts: [], actN: 0, pending: null, sayEv: null });
   skipping = false; tipShown = null; claudeText = ""; claudeState = "idle";
 }
 
 /* ===== Table drawing ===== */
 function seatPos(i) {
-  const v = (i - ME + 7) % 7;  // you always sit at the bottom
+  const N = G.seats.length, v = (i - ME + N) % N;  // you always sit at the bottom
   const narrow = window.matchMedia("(max-width: 760px)").matches;
-  const a = (90 + v * 360 / 7) * Math.PI / 180;
+  const a = (90 + v * 360 / N) * Math.PI / 180;
   const rx = narrow ? 40 : 44, ry = narrow ? 42 : 41;
   return { x: 50 + rx * Math.cos(a), y: 50 + ry * Math.sin(a) };
 }
@@ -1166,7 +1188,7 @@ function renderControls() {
       else w.textContent = `Waiting for ${LIVE.hostName || "the host"} to deal…`;
       row.append(w);
     } else {
-      if (solo && h.stack < 50) row.append(btn("Buy in again for £10", "primary", () => { h.stack += BUYIN; h.buyins++; saveSession(); renderAll(); }));
+      if (solo && h.stack < 50) row.append(btn("Buy in again for £10", "primary", () => { onRebuy(h); h.stack += BUYIN; h.buyins++; saveSession(); renderAll(); }));
       if (h.stack > 0 || !solo) row.append(btn(G.handNo ? "Deal next hand" : "Deal first hand", solo && h.stack < 50 ? "" : "primary", deal));
       if (G.mode === "host" && G.nextDealAt) { const w = document.createElement("span"); w.className = "waiting"; w.textContent = "Auto-deal in "; const ck = document.createElement("span"); ck.className = "clocktxt"; ck.dataset.deadline = G.nextDealAt; ck.dataset.prefix = ""; ck.textContent = secsLeft(G.nextDealAt) + "s"; w.append(ck); row.append(w); }
     }
@@ -1417,6 +1439,7 @@ function step() {
   const p = G.seats[i];
   if (p.hero) { G.waitingHero = true; tipShown = null; startClock(i); renderAll(); if (opts.tips) setTimeout(() => showTip(false), 10); return; }
   if (G.mode === "host" && p.human && LIVE.isPresent(p.name)) { G.waitingRemote = i; startClock(i); renderAll(); return; }
+  if (!PROFILES[p.name]) { apply(i, G.currentBet - p.bet === 0 ? "check" : "fold", 0); G.toAct = nextIdx(i, needsAction); renderAll(); G.timer = setTimeout(step, delay()); return; }
   const d = botDecide(i);
   const ms = thinkMs(i, d, G.think || {});
   p.thinking = ms > 0; if (ms > 0) renderAll();
@@ -1456,7 +1479,7 @@ function timeoutAct(i) {
   humanApply(i, type, 0, true);
 }
 function onRemoteAction(name, a) {
-  const i = SEAT_NAMES.indexOf(name);
+  const i = G.seats.findIndex(p => p.name === name);
   if (i < 0 || G.waitingRemote !== i || !a || a.hand !== G.handNo || a.n !== G.actN) return;
   if (!["fold", "check", "call", "raise"].includes(a.type)) return;
   clearTimeout(G.turnTimer); G.waitingRemote = -1; G.deadline = 0;
@@ -1465,7 +1488,7 @@ function onRemoteAction(name, a) {
 function finish() {
   G.result = settle(); G.toAct = -1; G.waitingHero = false; G.waitingRemote = -1; G.deadline = 0; skipping = false;
   clearTimeout(G.turnTimer);
-  logHand();
+  logHand(); recordLedger(G.result);
   if (G.mode === "solo") saveSession();
   if (G.mode === "host" && opts.autoDeal) { G.nextDealAt = serverNow() + AUTO_DEAL_MS; G.autoTimer = setTimeout(deal, AUTO_DEAL_MS); }
   renderAll();
@@ -1475,7 +1498,7 @@ function finish() {
 /* ===== Data: every real decision is saved so the computer players can learn ===== */
 function posLabel(i) {
   if (i === G.button) return "BTN"; if (i === G.sbI) return "SB"; if (i === G.bbI) return "BB";
-  const order = []; for (let k = 1; k <= 7; k++) { const j = (G.bbI + k) % 7; if (j === G.button) break; if (G.seats[j].hole.length) order.push(j); }
+  const order = [], N = G.seats.length; for (let k = 1; k <= N; k++) { const j = (G.bbI + k) % N; if (j === G.button) break; if (G.seats[j].hole.length) order.push(j); }
   const idx = order.indexOf(i), fromEnd = order.length - idx;
   return fromEnd === 1 ? "CO" : fromEnd === 2 ? "HJ" : idx === 0 ? "UTG" : "MP";
 }
@@ -1504,6 +1527,94 @@ function logHand() {
       board: G.board.map(cardStr).join(" "), holes, log: G.log.join("\n"),
       winners: G.result.winners.map(w => `${w.name} ${money(w.amount)}${w.hand ? " (" + w.hand + ")" : ""}`).join("; ") });
   } catch (e) { console.warn("Couldn't record hand", e); }
+}
+
+/* ===== Lifetime earnings: who paid whom, split into real players and computer players ===== */
+const kindOf = p => p.human ? "humans" : "bots";
+// A rebuy means the last £10 is gone: split that buy-in by where the money went since the previous one
+function onRebuy(p) {
+  try {
+    const ls = p.lossSince || { bots: 0, humans: 0 };
+    let wb = Math.max(0, ls.bots), wh = Math.max(0, ls.humans);
+    if (wb + wh === 0) { const others = G.seats.some(q => q !== p && q.human); wb = others ? 0.5 : 1; wh = others ? 0.5 : 0; }
+    const base = `totals/${kindOf(p)}/${p.name}`, up = {};
+    if (wb) up[`${base}/bots/buyins`] = wb / (wb + wh);
+    if (wh) up[`${base}/humans/buyins`] = wh / (wb + wh);
+    totalsUpdate(up);
+    p.lossSince = { bots: 0, humans: 0 };
+  } catch (e) { console.warn("Couldn't record buy-in", e); }
+}
+function recordLedger(res) {
+  try {
+    if (!res || !res.flows || G.mode === "client") return;
+    const up = {}, add = (k, v) => { up[k] = (up[k] || 0) + v; };
+    for (const { f, t, a } of res.flows) {
+      const pf = G.seats.find(q => q.name === f), pt = G.seats.find(q => q.name === t);
+      if (!pf || !pt) continue;
+      const kf = kindOf(pf), kt = kindOf(pt);
+      add(`totals/${kt}/${t}/${kf}/won`, a);
+      add(`totals/${kf}/${f}/${kt}/lost`, a);
+      (pf.lossSince ||= { bots: 0, humans: 0 })[kt] += a;
+      (pt.lossSince ||= { bots: 0, humans: 0 })[kf] -= a;
+    }
+    for (const p of G.seats) if (p.hole.length && !p.out) add(`totals/${kindOf(p)}/${p.name}/hands`, 1);
+    for (const k in up) up[k] = Math.round(up[k] * 100) / 100;
+    totalsUpdate(up);
+  } catch (e) { console.warn("Couldn't record earnings", e); }
+}
+const totQ = []; let totDraining = false;
+function totalsUpdate(nums) { if (Object.keys(nums).length) { totQ.push(nums); drainTotals(); } }
+async function drainTotals() {
+  if (totDraining) return; totDraining = true;
+  try {
+    const f = await fbInit();
+    while (totQ.length) { const nums = totQ.shift(), up = {}; for (const [k, v] of Object.entries(nums)) up[k] = f.D.increment(v); f.D.update(f.D.ref(f.db), up).catch(e => console.warn("Earnings save failed", e)); }
+  } catch (e) { console.warn("Database unavailable; will retry", e); }
+  totDraining = false;
+}
+let lifetime = null;
+function watchLifetime() {
+  fbInit().then(f => f.D.onValue(f.D.ref(f.db, "totals"), s => { lifetime = s.val() || {}; if (inLobby) renderLifetime(); })).catch(() => {});
+}
+function renderLifetime() {
+  const box = $("lifetime"); if (!box) return;
+  box.replaceChildren();
+  const h = document.createElement("h2"); h.textContent = "Lifetime earnings"; box.append(h);
+  if (!lifetime) { const p = document.createElement("p"); p.className = "note"; p.textContent = "Loading…"; box.append(p); return; }
+  const L = lifetime, get = (kind, name, opp) => (L[kind] && L[kind][name] && L[kind][name][opp]) || {};
+  const net = r => (r.won || 0) - (r.lost || 0);
+  if (meName) {
+    const vb = get("humans", meName, "bots"), vh = get("humans", meName, "humans"), hands = (L.humans && L.humans[meName] && L.humans[meName].hands) || 0;
+    const me = document.createElement("p"); me.className = "lt-me";
+    const fmt = v => (v > 0 ? "+" : "") + money(Math.round(v));
+    me.textContent = hands ? `${meName}: ${fmt(net(vb))} against the computer, ${fmt(net(vh))} against real players (${hands} hands).` : `${meName} hasn't played any recorded hands yet.`;
+    box.append(me);
+  }
+  const tables = [
+    ["Real players vs the computer", "humans", "bots"],
+    ["Real players vs each other", "humans", "humans"],
+    ["Computer players vs each other", "bots", "bots"],
+    ["Computer players vs real players", "bots", "humans"],
+  ];
+  for (const [title, kind, opp] of tables) {
+    const rows = Object.keys(L[kind] || {}).map(n => ({ n, r: get(kind, n, opp) })).filter(x => x.r.won || x.r.lost || x.r.buyins).sort((a, b) => net(b.r) - net(a.r));
+    const sec = document.createElement("div"); sec.className = "lt-sec";
+    const t = document.createElement("h3"); t.textContent = title; sec.append(t);
+    if (!rows.length) { const p = document.createElement("p"); p.className = "note"; p.textContent = "Nothing yet."; sec.append(p); box.append(sec); continue; }
+    const wrap = document.createElement("div"); wrap.className = "lt-wrap";
+    const tb = document.createElement("table"); tb.className = "lt";
+    const head = document.createElement("tr"); ["Player", "Buy-ins", "Won", "Lost", "Net"].forEach((c, i) => { const th = document.createElement("th"); th.textContent = c; if (i) th.className = "num"; head.append(th); });
+    tb.append(head);
+    for (const { n, r } of rows) {
+      const tr = document.createElement("tr"); if (kind === "humans" && n === meName) tr.className = "me";
+      const nv = net(r);
+      [n, (r.buyins || 0).toFixed(1), money(Math.round(r.won || 0)), money(Math.round(r.lost || 0)), (nv > 0 ? "+" : "") + money(Math.round(nv))].forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i) td.className = "num" + (i === 4 ? (nv > 0 ? " pos" : nv < 0 ? " neg" : "") : ""); tr.append(td); });
+      tb.append(tr);
+    }
+    wrap.append(tb); sec.append(wrap); box.append(sec);
+  }
+  const n = document.createElement("p"); n.className = "note"; n.textContent = "Won and lost count the money that went between players in each pot. Buy-ins are split by where the money went before each rebuy. Play money only.";
+  box.append(n);
 }
 
 /* ===== Firebase ===== */
@@ -1548,7 +1659,7 @@ async function drainData() {
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const LIVE = {
   code: null, isHost: false, meta: null, present: {}, offs: [], hostName: "", myHole: null, lastState: null, lastJson: "", lastSayN: null, error: "",
-  presentNames() { const m = this.meta || {}, s = m.seats || {}; return SEAT_NAMES.filter(n => s[n] && this.present[s[n]]); },
+  presentNames() { const m = this.meta || {}, s = m.seats || {}; return ALL_NAMES.filter(n => s[n] && this.present[s[n]]); },
   isPresent(name) { if (name === meName) return true; const uid = this.meta?.seats?.[name]; return !!(uid && this.present[uid]); },
   async enter(code) {
     const f = await fbInit(), D = f.D;
@@ -1571,7 +1682,7 @@ const LIVE = {
     await this.enter(code);
     this.offs.push(D.onValue(D.ref(f.db, `rooms/${code}/actions`), s => {
       const all = s.val() || {}, seats = this.meta?.seats || {};
-      for (const [uid, a] of Object.entries(all)) { const name = SEAT_NAMES.find(n => seats[n] === uid); if (name && name !== meName) onRemoteAction(name, a); }
+      for (const [uid, a] of Object.entries(all)) { const name = ALL_NAMES.find(n => seats[n] === uid); if (name && name !== meName) onRemoteAction(name, a); }
     }));
   },
   async join(code) {
@@ -1597,6 +1708,17 @@ const LIVE = {
   /* Host, between hands: whoever has joined takes over their seat (with a fresh £10); anyone who left goes back to the computer */
   syncSeats() {
     const seats = this.meta?.seats || {};
+    // Player 1 / Player 2 only have a seat while someone is playing them
+    const want = GUESTS.filter(n => n === meName || !!(seats[n] && this.present[seats[n]]));
+    const have = G.seats.filter(p => GUESTS.includes(p.name)).map(p => p.name);
+    if (want.join() !== have.join()) {
+      const btnName = G.seats[G.button]?.name;
+      const keep = G.seats.filter(p => !GUESTS.includes(p.name) || want.includes(p.name));
+      for (const g of want) if (!keep.some(p => p.name === g)) { const ns = newSeat(g); ns.human = false; keep.push(ns); }
+      keep.sort((a, b) => ALL_NAMES.indexOf(a.name) - ALL_NAMES.indexOf(b.name));
+      G.seats = keep; const bi = G.seats.findIndex(p => p.name === btnName); G.button = bi >= 0 ? bi : Math.min(G.button, G.seats.length - 1);
+      syncME();
+    }
     for (const p of G.seats) {
       const humanNow = p.name === meName || !!(seats[p.name] && this.present[seats[p.name]]);
       if (humanNow && !p.human) { p.stack = BUYIN; p.buyins = 1; p.out = false; G.log.push(`${p.name} joins the table with £10.`); }
@@ -1641,7 +1763,9 @@ function applyState(st) {
     lastAggr: st.lastAggr, raisesThisStreet: st.raisesThisStreet, result: st.result, sbI: st.sbI, bbI: st.bbI, deadline: st.deadline, actN: st.actN, acts: st.acts || [],
     commentary: st.commentary || [], nextDealAt: st.nextDealAt });
   const mine = LIVE.myHole && LIVE.myHole.hand === st.handNo ? LIVE.myHole.cards : null;
-  G.seats = st.seats.map((q, i) => ({ ...q, hero: i === ME, hole: q.hole && q.hole.length ? q.hole : q.dealt ? (i === ME && mine ? mine : [null, null]) : [] }));
+  const seatsIn = st.seats.some(q => q.name === meName) ? st.seats : st.seats.concat([{ name: meName, stack: BUYIN, buyins: 1, out: true, folded: true, allIn: false, bet: 0, committed: 0, acted: false, lastAct: "Sitting in next hand", shown: false, human: true, dealt: false, hole: [] }]);
+  ME = seatsIn.findIndex(q => q.name === meName);
+  G.seats = seatsIn.map((q, i) => ({ ...q, hero: i === ME, hole: q.hole && q.hole.length ? q.hole : q.dealt ? (i === ME && mine ? mine : [null, null]) : [] }));
   if (st.handNo !== prevHand) { G.heroDec = []; tipShown = null; G.heroStart = G.seats[ME].stack + G.seats[ME].committed; }
   G.waitingHero = G.toAct === ME && !G.result && G.street !== "idle" && !!mine && canAct(G.seats[ME]);
   if (!G.waitingHero) tipShown = null;
@@ -1661,12 +1785,12 @@ function renderLobby() {
   L.replaceChildren();
   const h = document.createElement("h2"); h.textContent = "Who are you?"; L.append(h);
   const names = document.createElement("div"); names.className = "names";
-  SEAT_NAMES.forEach(n => { const b = btn(n, n === meName ? "on" : "", () => { setMe(n); lobbyErr = ""; renderLobby(); renderWho(); }); b.setAttribute("aria-pressed", n === meName ? "true" : "false"); names.append(b); });
+  ALL_NAMES.forEach(n => { const b = btn(n, n === meName ? "on" : "", () => { setMe(n); lobbyErr = ""; renderLobby(); renderWho(); }); b.setAttribute("aria-pressed", n === meName ? "true" : "false"); names.append(b); });
   L.append(names);
   const why = document.createElement("p"); why.className = "note";
-  why.textContent = "Play as yourself. Your decisions are saved so the computer version of you learns to play more like the real you.";
+  why.textContent = "Play as yourself, or as Player 1 or Player 2 if you're not one of the seven. Your decisions are saved so the computer version of you learns to play more like the real you.";
   L.append(why);
-  if (!meName) return;
+  if (!meName) { const lt = document.createElement("div"); lt.id = "lifetime"; lt.className = "lifetime"; L.append(lt); renderLifetime(); return; }
   const modes = document.createElement("div"); modes.className = "modes";
   const m1 = document.createElement("div"); m1.className = "mode";
   const h1 = document.createElement("h3"); h1.textContent = "Solo"; const p1 = document.createElement("p"); p1.className = "note"; p1.textContent = "You against computer versions of everyone else.";
@@ -1684,6 +1808,7 @@ function renderLobby() {
   m3.append(h3, inp, jb); modes.append(m3);
   L.append(modes);
   const err = document.createElement("div"); err.className = "err"; err.setAttribute("role", "status"); err.textContent = lobbyErr; L.append(err);
+  const lt = document.createElement("div"); lt.id = "lifetime"; lt.className = "lifetime"; L.append(lt); renderLifetime();
 }
 function renderWho() {
   const w = $("who"); w.replaceChildren();
@@ -1826,7 +1951,8 @@ window.addEventListener("resize", () => { if (!inLobby) renderTable(); });
 setInterval(() => document.querySelectorAll("[data-deadline]").forEach(el => { el.textContent = el.dataset.prefix + secsLeft(+el.dataset.deadline) + "s"; }), 500);
 window.addEventListener("pagehide", () => { if (LIVE.code) LIVE.leave(); });
 showLobby(true);
-fbInit().catch(() => {});  // sign in early so saving and live tables are ready
+fbInit().catch(() => {});
+watchLifetime();  // sign in early so saving and live tables are ready
 if (window.claude?.use) window.claude.use("sample").then(fn => { sampleFn = fn; renderCoach(); }).catch(() => {});
 </script>
 </body>
